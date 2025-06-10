@@ -2,23 +2,25 @@
 use std::io::{self, Write};
 
 fn main() {
-    let stdin = io::stdin();
     loop {
         print!("$ ");
         io::stdout().flush().unwrap();
 
+        // Wait for user input
         let mut input = String::new();
-        stdin.read_line(&mut input).unwrap();
-        let input = input.trim();
+        io::stdin().read_line(&mut input).unwrap();
 
-        if input.is_empty() {
-            continue;
-        }
-
-        match input.trim() {
-            "quit" => break,
-            "exit 0" => return,
-            string => println!("{}: command not found", string),
+        match input
+            .trim()
+            .split_whitespace()
+            .collect::<Vec<&str>>()
+            .as_slice()
+        {
+            ["exit"] => break,
+            ["exit", code] => std::process::exit(code.parse().unwrap()),
+            ["echo", args @ ..] => println!("{}", args.join(" ")),
+            [other] => println!("{}: command not found", other),
+            _ => println!("Unknown command"),
         }
     }
 }
