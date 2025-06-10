@@ -2,14 +2,22 @@
 use std::io::{self, Write};
 
 fn main() {
-    // Uncomment this block to pass the first stage
-    print!("$ ");
-    io::stdout().flush().unwrap();
-
-    // Wait for user input
     let stdin = io::stdin();
-    let mut input = String::new();
-    stdin.read_line(&mut input).unwrap();
-    println!("{}: command not found", input.trim());
+    loop {
+        print!("$ ");
+        io::stdout().flush().unwrap();
 
+        let mut input = String::new();
+        stdin.read_line(&mut input).unwrap();
+        let input = input.trim();
+
+        if input.is_empty() {
+            continue;
+        }
+
+        match input {
+            "exit" => break,
+            command => println!("{}: command not found", command),
+        }
+    }
 }
