@@ -15,9 +15,10 @@ fn main() {
             continue;
         }
 
-        match input {
-            "exit" => break,
-            command => println!("{}: command not found", command),
+        match input.trim() {
+            "quit" => break,
+            "exit 0" => return,
+            string => println!("{}: command not found", string),
         }
     }
 }
