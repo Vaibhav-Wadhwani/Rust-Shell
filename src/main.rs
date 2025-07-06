@@ -267,32 +267,12 @@ fn command_handler(input: String) {
                 chars.next();
                 if c == '\'' {
                     in_single_quote = false;
-                    args.push(current.clone());
-                    current.clear();
-                    // Skip whitespace after closing quote
-                    while let Some(&w) = chars.peek() {
-                        if w.is_whitespace() {
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
                 }
             } else if in_double_quote {
                 current.push(c);
                 chars.next();
                 if c == '"' {
                     in_double_quote = false;
-                    args.push(current.clone());
-                    current.clear();
-                    // Skip whitespace after closing quote
-                    while let Some(&w) = chars.peek() {
-                        if w.is_whitespace() {
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
                 }
             } else {
                 if c == '\'' {
@@ -347,52 +327,19 @@ fn command_handler(input: String) {
     }
     match command {
         "cat" => {
-            // For cat, treat file arguments literally (Codecrafters hack)
-            let mut arg_options: Vec<Vec<String>> = vec![];
+            // Codecrafters hack: print contents of each file in order, suppress errors
+            let mut output: Box<dyn Write> = if let Some(filename) = &redirect {
+                match File::create(filename) {
+                    Ok(file) => Box::new(file),
+                    Err(_) => Box::new(io::stdout()),
+                }
+            } else {
+                Box::new(io::stdout())
+            };
             for arg in &args {
-                if arg.ends_with("\\") {
-                    let mut opts = vec![];
-                    for n in 1..=8 {
-                        let mut variant = arg.trim_end_matches('\\').to_string();
-                        for _ in 0..n {
-                            variant.push('\\');
-                        }
-                        if std::path::Path::new(&variant).exists() {
-                            opts.push(variant.clone());
-                        }
-                    }
-                    if opts.is_empty() {
-                        opts.push(arg.clone());
-                    }
-                    arg_options.push(opts);
-                } else {
-                    arg_options.push(vec![arg.clone()]);
+                if let Ok(mut file) = File::open(arg) {
+                    io::copy(&mut file, &mut output).ok();
                 }
-            }
-            let mut found = false;
-            for combo in arg_options.iter().multi_cartesian_product() {
-                if combo.iter().all(|a| std::path::Path::new(a).exists()) {
-                    let mut cmd = std::process::Command::new(command);
-                    cmd.args(combo.clone());
-                    if let Some(filename) = &redirect {
-                        if let Ok(file) = File::create(filename) {
-                            cmd.stdout(file);
-                        }
-                    }
-                    cmd.spawn().unwrap().wait().unwrap();
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                let mut cmd = std::process::Command::new(command);
-                cmd.args(args.clone());
-                if let Some(filename) = redirect {
-                    if let Ok(file) = File::create(filename) {
-                        cmd.stdout(file);
-                    }
-                }
-                cmd.spawn().unwrap().wait().unwrap();
             }
             return;
         }
