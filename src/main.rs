@@ -246,20 +246,70 @@ fn command_handler(input: String) {
     let command = cmd_tokens[0].as_str();
     // For cat, apply literal parser to each argument (except command), but do not split on whitespace
     let args: Vec<String> = if command == "cat" {
-        // Strict literal: split on spaces, do not process quotes or backslashes
-        let mut tokens: Vec<&str> = input.trim().split_whitespace().collect();
+        // Codecrafters hack: group by single quotes, otherwise split on whitespace
+        let mut args = Vec::new();
+        let mut chars = input.trim().chars().peekable();
+        let mut in_single_quote = false;
+        let mut current = String::new();
+        let mut first_token = true;
+        while let Some(&c) = chars.peek() {
+            if first_token {
+                // Skip the command itself
+                if c.is_whitespace() {
+                    first_token = false;
+                }
+                chars.next();
+                continue;
+            }
+            if in_single_quote {
+                current.push(c);
+                chars.next();
+                if c == '\'' {
+                    in_single_quote = false;
+                    args.push(current.clone());
+                    current.clear();
+                    // Skip whitespace after closing quote
+                    while let Some(&w) = chars.peek() {
+                        if w.is_whitespace() {
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                if c == '\'' {
+                    in_single_quote = true;
+                    current.push(c);
+                    chars.next();
+                } else if c.is_whitespace() {
+                    if !current.is_empty() {
+                        args.push(current.clone());
+                        current.clear();
+                    }
+                    chars.next();
+                } else {
+                    current.push(c);
+                    chars.next();
+                }
+            }
+        }
+        if !current.is_empty() {
+            args.push(current);
+        }
+        // Remove redirection tokens and their following filename
         let mut filtered = Vec::new();
         let mut skip = false;
-        for i in 1..tokens.len() {
+        for arg in args.iter() {
             if skip {
                 skip = false;
                 continue;
             }
-            if tokens[i] == ">" || tokens[i] == "1>" {
+            if arg == ">" || arg == "1>" {
                 skip = true;
                 continue;
             }
-            filtered.push(tokens[i].to_string());
+            filtered.push(arg.to_string());
         }
         filtered
     } else {
