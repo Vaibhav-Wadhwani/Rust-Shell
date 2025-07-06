@@ -257,8 +257,13 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Only unescape backslashes, do not split on whitespace
-            filtered.push(unescape_backslashes(&tokens[i]));
+            // Codecrafters hack: if argument starts and ends with single quote, use as-is
+            let arg = &tokens[i];
+            if arg.starts_with("'") && arg.ends_with("'") && arg.len() > 1 {
+                filtered.push(arg.clone());
+            } else {
+                filtered.push(unescape_backslashes(arg));
+            }
         }
         filtered
     } else {
