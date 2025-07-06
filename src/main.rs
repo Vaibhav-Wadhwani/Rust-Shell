@@ -4,6 +4,10 @@ use std::process::exit;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 fn main() -> ! {
     loop {
