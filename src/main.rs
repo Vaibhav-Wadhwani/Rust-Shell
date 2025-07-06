@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, Write, Read};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use itertools::Itertools;
@@ -218,6 +218,11 @@ fn command_handler(input: String) {
                     close(read_end).ok();
                     run_builtin(right_tokens.clone());
                     std::io::stdout().flush().ok();
+                    let mut buf = [0u8; 4096];
+                    let mut stdin = std::fs::File::open("/dev/stdin").unwrap();
+                    while let Ok(n) = stdin.read(&mut buf) {
+                        if n == 0 { break; }
+                    }
                     dup2(orig_stdin, 0).unwrap();
                     close(orig_stdin).ok();
                     let _ = waitpid(left_pid, None);
