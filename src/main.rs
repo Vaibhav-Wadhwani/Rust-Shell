@@ -20,17 +20,26 @@ fn main() -> ! {
 
         let input = input.trim();
 
-        let command = parse_command(input);
+        let command = process_line(input);
 
-        match command.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice() {
-            &[] => continue,
-            ["echo", args @ ..] => cmd_echo(args),
-            ["type", args @ ..] => cmd_type(args),
-            ["pwd"] => cmd_pwd(),
-            ["cd", path] => cmd_cd(path),
-            ["exit", "0"] => exit(0),
+        match command.as_slice() {
+            [] => continue,
+            [cmd, args @ ..] if *cmd == "echo" => {
+                cmd_echo(args);
+            }
+            [cmd, args @ ..] if *cmd == "type" => {
+                cmd_type(args);
+            }
+            [cmd, args @ ..] if *cmd == "pwd" => {
+                cmd_pwd();
+            }
+            [cmd, args @ ..] if *cmd == "cd" && args.len() == 1 => {
+                cmd_cd(&args[0]);
+            }
+            [cmd, args @ ..] if *cmd == "exit" && args == ["0"] => {
+                exit(0);
+            }
             [cmd, args @ ..] => {
-                // Try to run as external command
                 if let Some(exec_path) = find_in_path(cmd) {
                     let child = std::process::Command::new(exec_path)
                         .arg0(cmd)
@@ -52,94 +61,66 @@ fn main() -> ! {
     }
 }
 
-fn parse_command(input: &str) -> Vec<String> {
-    let mut args = Vec::new();
-    let mut current = String::new();
-    let mut chars = input.chars().peekable();
-    let mut in_single_quote = false;
-    let mut in_double_quote = false;
-    while let Some(c) = chars.next() {
-        match c {
-            '\\' if in_double_quote => {
-                if let Some(&next) = chars.peek() {
-                    match next {
-                        '\\' | '"' | '$' => {
-                            current.push(next);
-                            chars.next();
-                        }
-                        _ => {
-                            current.push('\\');
-                            current.push(next);
-                            chars.next();
-                        }
-                    }
-                }
-            }
-            '\\' if !in_single_quote => {
-                if let Some(&next) = chars.peek() {
-                    match next {
-                        ' ' | '\t' | '\n' | '\\' => {
-                            current.push(next);
-                            chars.next();
-                        }
-                        '\'' => {
-                            // Only include the single quote, not the backslash
-                            chars.next();
-                            current.push('\'');
-                        }
-                        _ => {
-                            current.push('\\');
-                            current.push(next);
-                            chars.next();
-                        }
-                    }
-                }
-            }
-            '\'' if !in_double_quote => {
-                in_single_quote = !in_single_quote;
-            }
-            '"' if !in_single_quote => {
-                in_double_quote = !in_double_quote;
-            }
-            ' ' | '\t' if !in_single_quote && !in_double_quote => {
-                if !current.is_empty() {
-                    args.push(current.clone());
-                    current.clear();
-                }
-                // skip consecutive spaces
-                while let Some(&next) = chars.peek() {
-                    if next == ' ' || next == '\t' {
-                        chars.next();
-                    } else {
+fn process_line(line: &str) -> Vec<String> {
+    let mut single = false;
+    let mut double = false;
+    let mut groups = Vec::new();
+    let mut cur = String::new();
+
+    let mut chars = line.chars();
+    while let Some(ch) = chars.next() {
+        if single {
+            match ch {
+                '\'' => single = false,
+                _ => cur.push(ch),
+            };
+        } else if double {
+            match ch {
+                '"' => double = false,
+                '\\' => {
+                    let Some(ch_next) = chars.next() else {
                         break;
+                    };
+                    if !['\\', '$', '"'].contains(&ch_next) {
+                        cur.push(ch);
+                    }
+                    cur.push(ch_next);
+                }
+                _ => cur.push(ch),
+            };
+        } else {
+            match ch {
+                '\'' => single = true,
+                '"' => double = true,
+                '\\' => {
+                    let Some(ch_next) = chars.next() else {
+                        break;
+                    };
+                    cur.push(ch_next);
+                }
+                ch if ch.is_whitespace() => {
+                    if !cur.is_empty() {
+                        groups.push(cur);
+                        cur = String::new();
                     }
                 }
-            }
-            _ => {
-                current.push(c);
-            }
+                _ => cur.push(ch),
+            };
         }
     }
-    if !current.is_empty() {
-        args.push(current);
+
+    if !cur.is_empty() {
+        groups.push(cur);
     }
-    args
+
+    groups
 }
 
-fn cmd_echo(args: &[&str]) {
-    // Print each argument separated by a single space, no extra quotes or escaping
-    let mut first = true;
-    for arg in args {
-        if !first {
-            print!(" ");
-        }
-        print!("{}", arg);
-        first = false;
-    }
-    println!();
+fn cmd_echo(args: &[String]) {
+    println!("{}", args.join(" "));
 }
 
-fn cmd_type(args: &[&str]) {
+fn cmd_type(args: &[String]) {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
@@ -155,10 +136,10 @@ fn cmd_type(args: &[&str]) {
         return;
     }
 
-    let cmd = args[0];
+    let cmd = args[0].clone();
 
     // Check for builtins
-    match cmd {
+    match cmd.as_str() {
         "type" | "echo" | "exit" | "pwd" => {
             println!("{} is a shell builtin", cmd);
             return;
@@ -170,7 +151,7 @@ fn cmd_type(args: &[&str]) {
     if let Ok(path_var) = env::var("PATH") {
         for dir in env::split_paths(&path_var) {
             let mut candidate = PathBuf::from(&dir);
-            candidate.push(cmd);
+            candidate.push(&cmd);
             if candidate.exists() {
                 #[cfg(unix)]
                 {
