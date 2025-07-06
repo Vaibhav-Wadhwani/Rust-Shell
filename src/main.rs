@@ -339,6 +339,8 @@ fn command_handler(input: String) {
             } else {
                 processed = processed.replace(['"', '\'', '\\'], "");
             }
+            // Also strip leading/trailing single/double quotes from the entire argument
+            processed = processed.trim_matches(['"', '\''].as_ref()).to_string();
             filtered.push(processed);
         }
         filtered
