@@ -330,14 +330,14 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Strip single quotes from last path component if present
+            // Strip single or double quotes from last path component if present
             let mut processed = arg.to_string();
             if let Some(pos) = processed.rfind('/') {
                 let (prefix, last) = processed.split_at(pos + 1);
-                if last.starts_with("'") && last.ends_with("'") && last.len() >= 2 {
+                if last.len() >= 2 && ((last.starts_with("'") && last.ends_with("'")) || (last.starts_with('"') && last.ends_with('"'))) {
                     processed = format!("{}{}", prefix, &last[1..last.len()-1]);
                 }
-            } else if processed.starts_with("'") && processed.ends_with("'") && processed.len() >= 2 {
+            } else if processed.len() >= 2 && ((processed.starts_with("'") && processed.ends_with("'")) || (processed.starts_with('"') && processed.ends_with('"'))) {
                 processed = processed[1..processed.len()-1].to_string();
             }
             filtered.push(processed);
