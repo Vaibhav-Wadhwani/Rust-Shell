@@ -570,8 +570,7 @@ impl Completer for BuiltinCompleter {
             }
         }
         // Track matches for double-tab
-        let mut matches: Vec<String> = completions.iter().map(|p| p.display.clone()).collect();
-        matches.sort();
+        let matches: Vec<String> = completions.iter().map(|p| p.display.clone()).collect();
         *self.last_matches.borrow_mut() = matches.clone();
         if prefix == *self.last_prefix.borrow() {
             *self.tab_count.borrow_mut() += 1;
