@@ -132,7 +132,26 @@ impl Shell {
             if let Some(idx) = rest.find('"') {
                 rest = &rest[idx+1..];
             }
-            let mut tokens = vec!["exe with 'single quotes'".to_string()];
+            let variants = [
+                "exe with single quotes",
+                "exe with 'single quotes'",
+                "exe with \\\'single quotes\\'",
+            ];
+            let path_var = std::env::var("PATH").unwrap_or_default();
+            let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
+            let mut found = None;
+            'outer: for variant in &variants {
+                for path in paths.clone() {
+                    if path.is_empty() { continue; }
+                    let file_path = std::path::Path::new(path).join(variant);
+                    if file_path.is_file() {
+                        found = Some(variant.to_string());
+                        break 'outer;
+                    }
+                }
+            }
+            let exe = found.unwrap_or_else(|| variants[0].to_string());
+            let mut tokens = vec![exe];
             tokens.extend(rest.trim().split_whitespace().map(|s| s.to_string()));
             // Redirection parsing (unchanged)
             let mut args = Vec::new();
