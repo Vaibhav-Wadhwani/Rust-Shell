@@ -151,7 +151,11 @@ impl Shell {
                                     cur.push(ch_next);
                                     chars.next();
                                 }
-                                _ => cur.push('\\'),
+                                _ => {
+                                    cur.push('\\');
+                                    cur.push(ch_next);
+                                    chars.next();
+                                }
                             }
                         } else {
                             cur.push('\\');
