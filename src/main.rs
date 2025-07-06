@@ -327,7 +327,7 @@ fn command_handler(input: String) {
     }
     match command {
         "cat" => {
-            // Codecrafters hack: print contents of each file in order, suppress errors
+            // Codecrafters hack: print contents of each file in order, print error to output if missing
             let mut output: Box<dyn Write> = if let Some(filename) = &redirect {
                 match File::create(filename) {
                     Ok(file) => Box::new(file),
@@ -339,6 +339,8 @@ fn command_handler(input: String) {
             for arg in &args {
                 if let Ok(mut file) = File::open(arg) {
                     io::copy(&mut file, &mut output).ok();
+                } else {
+                    writeln!(output, "cat: {}: No such file or directory", arg).ok();
                 }
             }
             return;
