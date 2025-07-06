@@ -63,7 +63,7 @@ fn parse_command(input: &str) -> Vec<String> {
             '\\' if !in_single_quote => {
                 if let Some(&next) = chars.peek() {
                     match next {
-                        ' ' | '\t' | '\n' | '\\' => {
+                        ' ' | '\t' | '\n' | '\\' | '\'' => {
                             current.push(next);
                             chars.next();
                         }
