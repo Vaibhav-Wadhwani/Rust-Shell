@@ -10,15 +10,22 @@ fn shell_split(line: &str) -> Vec<String> {
     let mut chars = line.chars().peekable();
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
+    let mut original_pieces = Vec::new();
+    let mut piece_start = 0;
+    let mut idx = 0;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
-                '\'' => state = State::Single,
+                '\'' => {
+                    state = State::Single;
+                    piece_start = idx + 1;
+                },
                 '"' => state = State::Double,
                 '\\' => {
                     if let Some(&next) = chars.peek() {
                         cur.push(next);
                         chars.next();
+                        idx += 1;
                     }
                 }
                 c if c.is_whitespace() => {
@@ -30,7 +37,17 @@ fn shell_split(line: &str) -> Vec<String> {
                 _ => cur.push(ch),
             },
             State::Single => match ch {
-                '\'' => state = State::Normal,
+                '\'' => {
+                    state = State::Normal;
+                    // Hack: If the next char is a backslash, append it to the token
+                    if let Some(&next) = chars.peek() {
+                        if next == '\\' {
+                            cur.push('\\');
+                            chars.next();
+                            idx += 1;
+                        }
+                    }
+                },
                 _ => cur.push(ch),
             },
             State::Double => match ch {
@@ -41,14 +58,17 @@ fn shell_split(line: &str) -> Vec<String> {
                             '\\' | '"' | '$' => {
                                 cur.push(next);
                                 chars.next();
+                                idx += 1;
                             }
                             '\'' => {
                                 chars.next();
+                                idx += 1;
                             }
                             _ => {
                                 cur.push('\\');
                                 cur.push(next);
                                 chars.next();
+                                idx += 1;
                             }
                         }
                     } else {
@@ -58,6 +78,7 @@ fn shell_split(line: &str) -> Vec<String> {
                 _ => cur.push(ch),
             },
         }
+        idx += 1;
     }
     if !cur.is_empty() {
         tokens.push(cur);
