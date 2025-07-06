@@ -330,12 +330,17 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Only strip single quotes if not double-quoted
-            if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 && !(arg.starts_with("\"") && arg.ends_with("\"")) {
-                filtered.push(arg[1..arg.len()-1].to_string());
-            } else {
-                filtered.push(arg.to_string());
+            // Strip single quotes from last path component if present
+            let mut processed = arg.to_string();
+            if let Some(pos) = processed.rfind('/') {
+                let (prefix, last) = processed.split_at(pos + 1);
+                if last.starts_with("'") && last.ends_with("'") && last.len() >= 2 {
+                    processed = format!("{}{}", prefix, &last[1..last.len()-1]);
+                }
+            } else if processed.starts_with("'") && processed.ends_with("'") && processed.len() >= 2 {
+                processed = processed[1..processed.len()-1].to_string();
             }
+            filtered.push(processed);
         }
         filtered
     } else {
