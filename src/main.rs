@@ -310,8 +310,8 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Strip outer single quotes if present
-            let processed = if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 {
+            // Only strip outer single quotes if not inside double quotes
+            let processed = if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 && !(arg.starts_with("\"") && arg.ends_with("\"")) {
                 arg[1..arg.len()-1].to_string()
             } else {
                 arg.clone()
