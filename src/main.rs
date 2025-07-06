@@ -99,8 +99,19 @@ fn unescape_backslashes(s: &str) -> String {
     while let Some(ch) = chars.next() {
         if ch == '\\' {
             if let Some(&next) = chars.peek() {
-                result.push(next);
-                chars.next();
+                match next {
+                    ' ' | '\\' | '\t' | '\n' | '\'' => {
+                        result.push(next);
+                        chars.next();
+                    }
+                    _ => {
+                        result.push('\\');
+                        result.push(next);
+                        chars.next();
+                    }
+                }
+            } else {
+                result.push('\\');
             }
         } else {
             result.push(ch);
