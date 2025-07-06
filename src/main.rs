@@ -126,13 +126,12 @@ impl Shell {
     }
 
     fn process_line(&self, line: &str) -> (Vec<String>, Option<String>) {
-        // Parse for redirection: > or 1>
         let mut tokens = Vec::new();
         let mut redir: Option<String> = None;
-        let mut single = false;
-        let mut double = false;
         let mut cur = String::new();
         let mut chars = line.chars().peekable();
+        let mut single = false;
+        let mut double = false;
         while let Some(&ch) = chars.peek() {
             if single {
                 chars.next();
@@ -147,11 +146,15 @@ impl Shell {
                     '\\' => {
                         chars.next();
                         if let Some(&ch_next) = chars.peek() {
-                            if !['\\', '$', '"'].contains(&ch_next) {
-                                cur.push('\\');
+                            match ch_next {
+                                '\\' | '"' | '$' => {
+                                    cur.push(ch_next);
+                                    chars.next();
+                                }
+                                _ => cur.push('\\'),
                             }
-                            cur.push(ch_next);
-                            chars.next();
+                        } else {
+                            cur.push('\\');
                         }
                     }
                     _ => cur.push(ch),
@@ -159,18 +162,14 @@ impl Shell {
             } else {
                 // Check for > or 1>
                 if ch == '>' || (ch == '1' && chars.clone().nth(1) == Some('>')) {
-                    // Push current token if any
                     if !cur.is_empty() {
                         tokens.push(cur.clone());
                         cur.clear();
                     }
-                    // Consume '1' if present
                     if ch == '1' {
                         chars.next();
                     }
-                    // Consume '>'
                     chars.next();
-                    // Skip whitespace
                     while let Some(&c) = chars.peek() {
                         if c.is_whitespace() {
                             chars.next();
@@ -178,7 +177,6 @@ impl Shell {
                             break;
                         }
                     }
-                    // Parse filename
                     let mut fname = String::new();
                     let mut in_single = false;
                     let mut in_double = false;
