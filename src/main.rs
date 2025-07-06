@@ -1,6 +1,9 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::process::exit;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
 
 fn main() -> ! {
     loop {
@@ -41,8 +44,62 @@ fn cmd_type(args: &[&str]) {
         return;
     }
 
-    match args[0] {
-        "type" | "echo" | "exit" => println!("{} is a shell builtin", args[0]),
-        _ => println!("{}: not found", args[0]),
+    let cmd = args[0];
+    let mut found_builtin = false;
+    let mut found_executable = None;
+
+    // Check for builtins
+    match cmd {
+        "type" | "echo" | "exit" => {
+            println!("{} is a shell builtin", cmd);
+            found_builtin = true;
+        },
+        _ => {}
+    }
+
+    // Search PATH for executable
+    if let Ok(path_var) = env::var("PATH") {
+        for dir in env::split_paths(&path_var) {
+            let mut candidate = PathBuf::from(&dir);
+            candidate.push(cmd);
+            if candidate.exists() {
+                // On Unix, check for execute permission; on Windows, just check existence
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = fs::metadata(&candidate) {
+                        let perm = metadata.permissions().mode();
+                        if (perm & 0o111) != 0 {
+                            found_executable = Some(candidate);
+                            break;
+                        }
+                    }
+                }
+                #[cfg(windows)]
+                {
+                    // On Windows, check for .exe, .bat, .cmd extensions as well
+                    let exts = ["", ".exe", ".bat", ".cmd"];
+                    for ext in &exts {
+                        let mut candidate_with_ext = candidate.clone();
+                        if !ext.is_empty() {
+                            candidate_with_ext.set_extension(ext.trim_start_matches('.'));
+                        }
+                        if candidate_with_ext.exists() {
+                            found_executable = Some(candidate_with_ext);
+                            break;
+                        }
+                    }
+                    if found_executable.is_some() {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(path) = found_executable {
+        println!("{} is {}", cmd, path.display());
+    } else if !found_builtin {
+        println!("{}: not found", cmd);
     }
 }
