@@ -127,7 +127,16 @@ fn parse_command(input: &str) -> Vec<String> {
 }
 
 fn cmd_echo(args: &[&str]) {
-    println!("{}", args.join(" "));
+    // Print each argument separated by a single space, no extra quotes or escaping
+    let mut first = true;
+    for arg in args {
+        if !first {
+            print!(" ");
+        }
+        print!("{}", arg);
+        first = false;
+    }
+    println!();
 }
 
 fn cmd_type(args: &[&str]) {
