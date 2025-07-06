@@ -74,8 +74,6 @@ impl Shell {
         let new_cwd = if arg == "~" {
             let home = std::env::var("HOME").map_err(|e| e.to_string())?;
             PathBuf::from(home)
-        } else if Path::new(arg).is_absolute() {
-            PathBuf::from(arg)
         } else {
             self.cwd.join(arg)
         };
@@ -98,7 +96,7 @@ impl Shell {
 
     fn find_command(&self, cmd: &str) -> Option<PathBuf> {
         let path_var = std::env::var("PATH").ok()?;
-        let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
+        let paths = path_var.split(":");
 
         for path in paths {
             let path = Path::new(path);
@@ -121,7 +119,7 @@ impl Shell {
         let mut groups = Vec::new();
         let mut cur = String::new();
 
-        let mut chars = line.chars().peekable();
+        let mut chars = line.chars();
         while let Some(ch) = chars.next() {
             if single {
                 match ch {
@@ -132,16 +130,13 @@ impl Shell {
                 match ch {
                     '"' => double = false,
                     '\\' => {
-                        if let Some(&ch_next) = chars.peek() {
-                            if ch_next == '\\' || ch_next == '"' || ch_next == '$' {
-                                chars.next();
-                                cur.push(ch_next);
-                            } else {
-                                cur.push('\\');
-                                cur.push(ch_next);
-                                chars.next();
-                            }
+                        let Some(ch_next) = chars.next() else {
+                            break;
+                        };
+                        if !['\\', '$', '"'].contains(&ch_next) {
+                            cur.push(ch);
                         }
+                        cur.push(ch_next);
                     }
                     _ => cur.push(ch),
                 };
@@ -150,19 +145,10 @@ impl Shell {
                     '\'' => single = true,
                     '"' => double = true,
                     '\\' => {
-                        if let Some(&ch_next) = chars.peek() {
-                            match ch_next {
-                                ' ' | '\t' | '\n' | '\\' | '\'' => {
-                                    chars.next();
-                                    cur.push(ch_next);
-                                }
-                                _ => {
-                                    cur.push('\\');
-                                    cur.push(ch_next);
-                                    chars.next();
-                                }
-                            }
-                        }
+                        let Some(ch_next) = chars.next() else {
+                            break;
+                        };
+                        cur.push(ch_next);
                     }
                     ch if ch.is_whitespace() => {
                         if !cur.is_empty() {
