@@ -180,7 +180,7 @@ fn command_handler(input: String) {
             for arg in &args {
                 if arg.ends_with("\\") {
                     let mut opts = vec![];
-                    for n in 1..=4 {
+                    for n in 1..=8 {
                         let mut variant = arg.trim_end_matches('\\').to_string();
                         for _ in 0..n {
                             variant.push('\\');
