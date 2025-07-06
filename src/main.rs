@@ -58,23 +58,33 @@ fn parse_command(input: &str) -> Vec<String> {
     let mut chars = input.chars().peekable();
     let mut in_single_quote = false;
     let mut in_double_quote = false;
+    let mut escape = false;
     while let Some(&c) = chars.peek() {
+        if escape {
+            current.push(c);
+            chars.next();
+            escape = false;
+            continue;
+        }
         match c {
+            '\\' if !in_single_quote => {
+                chars.next();
+                escape = true;
+            }
             '\'' if !in_double_quote => {
-                chars.next(); // consume quote
+                chars.next();
                 in_single_quote = !in_single_quote;
             }
             '"' if !in_single_quote => {
-                chars.next(); // consume quote
+                chars.next();
                 in_double_quote = !in_double_quote;
             }
             ' ' | '\t' if !in_single_quote && !in_double_quote => {
-                chars.next(); // consume space
+                chars.next();
                 if !current.is_empty() {
                     args.push(current.clone());
                     current.clear();
                 }
-                // skip consecutive spaces
                 while let Some(&next) = chars.peek() {
                     if next == ' ' || next == '\t' {
                         chars.next();
