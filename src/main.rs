@@ -132,7 +132,6 @@ fn unescape_backslashes(s: &str) -> String {
 }
 
 fn command_handler(input: String) {
-    // Pipeline support: only handle a single |
     if let Some(pipe_pos) = {
         let mut in_single = false;
         let mut in_double = false;
@@ -157,40 +156,107 @@ fn command_handler(input: String) {
         if left_tokens.is_empty() || right_tokens.is_empty() {
             return;
         }
+        let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
+        let left_is_builtin = shell_like_builtins.contains(&left_tokens[0].as_str());
+        let right_is_builtin = shell_like_builtins.contains(&right_tokens[0].as_str());
         let (read_end, write_end) = pipe().expect("pipe failed");
-        // Left child (producer)
-        match unsafe { fork() } {
-            Ok(ForkResult::Child) => {
-                // Set stdout to write_end
-                close(read_end).ok();
-                dup2(write_end, 1).expect("dup2 failed");
-                close(write_end).ok();
-                let cmd = CString::new(left_tokens[0].clone()).unwrap();
-                let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
-            }
-            Ok(ForkResult::Parent { child: left_pid }) => {
-                // Right child (consumer)
-                match unsafe { fork() } {
-                    Ok(ForkResult::Child) => {
-                        close(write_end).ok();
-                        dup2(read_end, 0).expect("dup2 failed");
-                        close(read_end).ok();
-                        let cmd = CString::new(right_tokens[0].clone()).unwrap();
-                        let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                        execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
-                    }
-                    Ok(ForkResult::Parent { child: right_pid }) => {
-                        close(read_end).ok();
-                        close(write_end).ok();
-                        let _ = waitpid(left_pid, None);
-                        let _ = waitpid(right_pid, None);
-                        return;
-                    }
-                    Err(_) => { eprintln!("fork failed"); return; }
+        if left_is_builtin && right_is_builtin {
+            let orig_stdout = dup2(1, 1000).unwrap();
+            let orig_stdin = dup2(0, 1001).unwrap();
+            dup2(write_end, 1).unwrap();
+            close(read_end).ok();
+            run_builtin(left_tokens.clone());
+            std::io::stdout().flush().ok();
+            dup2(orig_stdout, 1).unwrap();
+            close(write_end).ok();
+            dup2(read_end, 0).unwrap();
+            run_builtin(right_tokens.clone());
+            std::io::stdout().flush().ok();
+            dup2(orig_stdin, 0).unwrap();
+            close(orig_stdout).ok();
+            close(orig_stdin).ok();
+            close(read_end).ok();
+            return;
+        } else if left_is_builtin {
+            match unsafe { fork() } {
+                Ok(ForkResult::Child) => {
+                    close(write_end).ok();
+                    dup2(read_end, 0).unwrap();
+                    close(read_end).ok();
+                    let cmd = CString::new(right_tokens[0].clone()).unwrap();
+                    let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                    execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                 }
+                Ok(ForkResult::Parent { child: right_pid }) => {
+                    close(read_end).ok();
+                    let orig_stdout = dup2(1, 1000).unwrap();
+                    dup2(write_end, 1).unwrap();
+                    close(write_end).ok();
+                    run_builtin(left_tokens.clone());
+                    std::io::stdout().flush().ok();
+                    dup2(orig_stdout, 1).unwrap();
+                    close(orig_stdout).ok();
+                    let _ = waitpid(right_pid, None);
+                    return;
+                }
+                Err(_) => { eprintln!("fork failed"); return; }
             }
-            Err(_) => { eprintln!("fork failed"); return; }
+        } else if right_is_builtin {
+            match unsafe { fork() } {
+                Ok(ForkResult::Child) => {
+                    close(read_end).ok();
+                    dup2(write_end, 1).unwrap();
+                    close(write_end).ok();
+                    let cmd = CString::new(left_tokens[0].clone()).unwrap();
+                    let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                    execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
+                }
+                Ok(ForkResult::Parent { child: left_pid }) => {
+                    close(write_end).ok();
+                    let orig_stdin = dup2(0, 1001).unwrap();
+                    dup2(read_end, 0).unwrap();
+                    close(read_end).ok();
+                    run_builtin(right_tokens.clone());
+                    std::io::stdout().flush().ok();
+                    dup2(orig_stdin, 0).unwrap();
+                    close(orig_stdin).ok();
+                    let _ = waitpid(left_pid, None);
+                    return;
+                }
+                Err(_) => { eprintln!("fork failed"); return; }
+            }
+        } else {
+            match unsafe { fork() } {
+                Ok(ForkResult::Child) => {
+                    close(read_end).ok();
+                    dup2(write_end, 1).expect("dup2 failed");
+                    close(write_end).ok();
+                    let cmd = CString::new(left_tokens[0].clone()).unwrap();
+                    let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                    execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
+                }
+                Ok(ForkResult::Parent { child: left_pid }) => {
+                    match unsafe { fork() } {
+                        Ok(ForkResult::Child) => {
+                            close(write_end).ok();
+                            dup2(read_end, 0).expect("dup2 failed");
+                            close(read_end).ok();
+                            let cmd = CString::new(right_tokens[0].clone()).unwrap();
+                            let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                            execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
+                        }
+                        Ok(ForkResult::Parent { child: right_pid }) => {
+                            close(read_end).ok();
+                            close(write_end).ok();
+                            let _ = waitpid(left_pid, None);
+                            let _ = waitpid(right_pid, None);
+                            return;
+                        }
+                        Err(_) => { eprintln!("fork failed"); return; }
+                    }
+                }
+                Err(_) => { eprintln!("fork failed"); return; }
+            }
         }
     }
     let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
@@ -200,7 +266,6 @@ fn command_handler(input: String) {
     }
     let command = tokens_shell[0].as_str();
     if shell_like_builtins.contains(&command) {
-        // Use shell-like parsing for builtins
         let tokens = tokens_shell;
         let mut redirect = None;
         let mut redirect_append = None;
@@ -231,7 +296,6 @@ fn command_handler(input: String) {
         let command = filtered_tokens[0].as_str();
         let args: Vec<String> = filtered_tokens[1..].iter().map(|s| s.to_string()).collect();
         if let Some(filename) = &stderr_redirect {
-            // Create the file even if we never write to it
             let _ = File::create(filename);
         }
         match command {
@@ -316,12 +380,10 @@ fn command_handler(input: String) {
         }
         return;
     }
-    // For external commands: use shell-like for command and args
     let tokens = shell_split_shell_like(input.trim());
     if tokens.is_empty() {
         return;
     }
-    // Redirection parsing for external commands
     let mut redirect = None;
     let mut redirect_append = None;
     let mut stderr_redirect = None;
@@ -350,7 +412,6 @@ fn command_handler(input: String) {
     }
     let command = filtered_tokens[0].as_str();
     let args: Vec<String> = if command == "cat" {
-        // Codecrafters hack: group by single/double quotes, otherwise split on whitespace
         let mut args = Vec::new();
         let mut chars = input.trim().chars().peekable();
         let mut in_single_quote = false;
@@ -359,7 +420,6 @@ fn command_handler(input: String) {
         let mut first_token = true;
         while let Some(&c) = chars.peek() {
             if first_token {
-                // Skip the command itself
                 if c.is_whitespace() {
                     first_token = false;
                 }
@@ -402,7 +462,6 @@ fn command_handler(input: String) {
         if !current.is_empty() {
             args.push(current);
         }
-        // Remove redirection tokens and their following filename
         let mut filtered = Vec::new();
         let mut skip = false;
         for arg in args.iter() {
@@ -414,13 +473,11 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Strip outer double quotes if present
             let mut processed = if arg.starts_with('"') && arg.ends_with('"') && arg.len() >= 2 {
                 arg[1..arg.len()-1].to_string()
             } else {
                 arg.clone()
             };
-            // Only strip outer single quotes if not inside double quotes
             if processed.starts_with("'") && processed.ends_with("'") && processed.len() >= 2 && !(arg.starts_with('"') && arg.ends_with('"')) {
                 processed = processed[1..processed.len()-1].to_string();
             }
@@ -430,7 +487,6 @@ fn command_handler(input: String) {
     } else {
         filtered_tokens[1..].iter().map(|s| s.to_string()).collect()
     };
-    // Codecrafters hack: handle quoted single quotes executable
     let mut exec_variants = vec![];
     if input.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
         exec_variants.push("exe with single quotes".to_string());
@@ -581,14 +637,12 @@ impl Completer for BuiltinCompleter {
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let prefix = &line[..pos];
         let mut names = Vec::new();
-        // Builtins
         if "echo".starts_with(prefix) {
             names.push("echo".to_string());
         }
         if "exit".starts_with(prefix) {
             names.push("exit".to_string());
         }
-        // External executables in PATH
         if let Ok(path_var) = std::env::var("PATH") {
             for dir in path_var.split(':') {
                 let path = std::path::Path::new(dir);
@@ -603,13 +657,12 @@ impl Completer for BuiltinCompleter {
                                     None => continue,
                                 };
                                 if file_name_str.starts_with(prefix) {
-                                    // Check if executable
                                     let meta = entry.metadata();
                                     if let Ok(m) = meta {
                                         #[cfg(unix)]
                                         let is_exec = m.permissions().mode() & 0o111 != 0;
                                         #[cfg(not(unix))]
-                                        let is_exec = true; // On Windows, assume all files in PATH are executable
+                                        let is_exec = true;
                                         if is_exec {
                                             names.push(file_name_str.to_string());
                                         }
@@ -621,7 +674,6 @@ impl Completer for BuiltinCompleter {
                 }
             }
         }
-        // Deduplicate and sort
         names.sort();
         names.dedup();
         let completions: Vec<Pair> = names.iter().map(|n| Pair {
@@ -663,7 +715,6 @@ fn main() {
     rl.set_helper(Some(&completer));
     loop {
         let readline = rl.readline("$ ");
-        // Check for double-tab logic
         if let Some(helper) = rl.helper() {
             let c = helper as &BuiltinCompleter;
             let tab_count = *c.tab_count.borrow();
@@ -696,5 +747,77 @@ fn main() {
                 break;
             }
         }
+    }
+}
+
+fn run_builtin(tokens: Vec<String>) {
+    let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
+    if tokens.is_empty() { return; }
+    let command = tokens[0].as_str();
+    let args: Vec<String> = tokens[1..].iter().map(|s| s.to_string()).collect();
+    match command {
+        "exit" => std::process::exit(
+            args.get(0)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(255),
+        ),
+        "echo" => {
+            let output = args.join(" ");
+            println!("{}", output);
+        }
+        "type" => {
+            if args.is_empty() {
+                return;
+            }
+            match args[0].as_str() {
+                "echo" | "exit" | "type" | "pwd" | "cd" => {
+                    println!("{} is a shell builtin", args[0])
+                }
+                _ => {
+                    let path = std::env::var("PATH").unwrap_or_default();
+                    let paths = path.split(':');
+                    for path in paths {
+                        let full_path = format!("{}/{}", path, args[0]);
+                        if let Ok(metadata) = std::fs::metadata(&full_path) {
+                            if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                                println!("{} is {}", args[0], full_path);
+                                return;
+                            }
+                        }
+                    }
+                    println!("{}: not found", args[0])
+                }
+            }
+        }
+        "pwd" => {
+            let current = env::current_dir();
+            match current {
+                Ok(path) => println!("{}", path.display()),
+                Err(_e) => println!("{}: command not found", command),
+            }
+        }
+        "cd" => {
+            if args.is_empty() {
+                println!("cd: missing argument");
+                return;
+            }
+            let mut target = args[0].to_string();
+            if target == "~" {
+                if let Ok(home) = env::var("HOME") {
+                    target = home;
+                }
+            }
+            match env::set_current_dir(target.as_str()) {
+                Ok(_) => {}
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        println!("cd: {}: No such file or directory", args[0]);
+                    } else {
+                        println!("cd: {}", e);
+                    }
+                }
+            }
+        }
+        _ => unreachable!(),
     }
 }
