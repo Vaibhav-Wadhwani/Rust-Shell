@@ -167,7 +167,7 @@ fn command_handler(input: String) {
                 close(write_end).ok();
                 let cmd = CString::new(left_tokens[0].clone()).unwrap();
                 let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                execvp(&cmd, &args).unwrap_or_else(|_| { libc::_exit(127) });
+                execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
             }
             Ok(ForkResult::Parent { child: left_pid }) => {
                 // Right child (consumer)
@@ -178,7 +178,7 @@ fn command_handler(input: String) {
                         close(read_end).ok();
                         let cmd = CString::new(right_tokens[0].clone()).unwrap();
                         let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                        execvp(&cmd, &args).unwrap_or_else(|_| { libc::_exit(127) });
+                        execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                     }
                     Ok(ForkResult::Parent { child: right_pid }) => {
                         close(read_end).ok();
