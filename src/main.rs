@@ -130,102 +130,75 @@ impl Shell {
         let mut redir: Option<String> = None;
         let mut cur = String::new();
         let mut chars = line.chars().peekable();
-        let mut single = false;
-        let mut double = false;
-        while let Some(&ch) = chars.peek() {
-            if single {
-                chars.next();
-                match ch {
-                    '\'' => single = false,
-                    _ => cur.push(ch),
-                }
-            } else if double {
-                chars.next();
-                match ch {
-                    '"' => double = false,
+        enum State { Normal, Single, Double }
+        let mut state = State::Normal;
+        while let Some(ch) = chars.next() {
+            match state {
+                State::Normal => match ch {
+                    '\'' => state = State::Single,
+                    '"' => state = State::Double,
                     '\\' => {
-                        chars.next();
-                        if let Some(ch_next) = chars.next() {
-                            if ch_next == '\'' {
-                                cur.push('\'');
-                            } else if ch_next == '\\' || ch_next == '"' || ch_next == '$' {
-                                cur.push(ch_next);
-                            } else {
-                                cur.push('\\');
-                                cur.push(ch_next);
+                        if let Some(&next) = chars.peek() {
+                            cur.push(next);
+                            chars.next();
+                        }
+                    }
+                    c if c.is_whitespace() => {
+                        if !cur.is_empty() {
+                            tokens.push(cur.clone());
+                            cur.clear();
+                        }
+                    }
+                    _ => cur.push(ch),
+                },
+                State::Single => match ch {
+                    '\'' => state = State::Normal,
+                    _ => cur.push(ch),
+                },
+                State::Double => match ch {
+                    '"' => state = State::Normal,
+                    '\\' => {
+                        if let Some(&next) = chars.peek() {
+                            match next {
+                                '\\' | '"' | '$' => {
+                                    cur.push(next);
+                                    chars.next();
+                                }
+                                '\'' => {
+                                    // Codecrafters: drop backslash before single quote in double quotes
+                                    cur.push('\'');
+                                    chars.next();
+                                }
+                                _ => {
+                                    cur.push('\\');
+                                    cur.push(next);
+                                    chars.next();
+                                }
                             }
                         } else {
                             cur.push('\\');
                         }
                     }
                     _ => cur.push(ch),
-                }
-            } else {
-                // Redirection: > or 1>
-                if ch == '>' || (ch == '1' && chars.clone().nth(1) == Some('>')) {
-                    if !cur.is_empty() {
-                        tokens.push(cur.clone());
-                        cur.clear();
-                    }
-                    if ch == '1' {
-                        chars.next();
-                    }
-                    chars.next();
-                    while let Some(&c) = chars.peek() {
-                        if c.is_whitespace() {
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    let mut fname = String::new();
-                    let mut in_single = false;
-                    let mut in_double = false;
-                    while let Some(&c) = chars.peek() {
-                        if !in_single && !in_double && c.is_whitespace() {
-                            break;
-                        }
-                        if c == '\'' && !in_double {
-                            in_single = !in_single;
-                            chars.next();
-                            continue;
-                        }
-                        if c == '"' && !in_single {
-                            in_double = !in_double;
-                            chars.next();
-                            continue;
-                        }
-                        fname.push(c);
-                        chars.next();
-                    }
-                    redir = Some(fname);
-                } else {
-                    match ch {
-                        '\'' => { single = true; chars.next(); },
-                        '"' => { double = true; chars.next(); },
-                        '\\' => {
-                            chars.next();
-                            if let Some(&ch_next) = chars.peek() {
-                                cur.push(ch_next);
-                                chars.next();
-                            }
-                        }
-                        c if c.is_whitespace() => {
-                            chars.next();
-                            if !cur.is_empty() {
-                                tokens.push(cur.clone());
-                                cur.clear();
-                            }
-                        }
-                        _ => { cur.push(ch); chars.next(); },
-                    }
-                }
+                },
             }
         }
         if !cur.is_empty() {
             tokens.push(cur);
         }
-        (tokens, redir)
+        // Redirection parsing (unchanged)
+        let mut args = Vec::new();
+        let mut i = 0;
+        while i < tokens.len() {
+            if (tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.len() {
+                redir = Some(tokens[i + 1].clone());
+                i += 2;
+            } else {
+                args.push(tokens[i].clone());
+                i += 1;
+            }
+        }
+        (args, redir)
     }
 
     fn exec_command(&self, cmd: &str, args: &[String], redir: Option<&String>) -> Result<(), String> {
