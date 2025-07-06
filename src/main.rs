@@ -762,7 +762,7 @@ fn run_builtin(tokens: Vec<String>) {
         ),
         "echo" => {
             let output = args.join(" ");
-            let _ = writeln!(std::io::stdout(), "{}", output);
+            let _ = writeln_ignore_broken_pipe(std::io::stdout(), &output);
             let _ = std::io::stdout().flush();
         }
         "type" => {
@@ -771,7 +771,7 @@ fn run_builtin(tokens: Vec<String>) {
             }
             match args[0].as_str() {
                 "echo" | "exit" | "type" | "pwd" | "cd" => {
-                    let _ = writeln!(std::io::stdout(), "{} is a shell builtin", args[0]);
+                    let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{} is a shell builtin", args[0]));
                 }
                 _ => {
                     let path = std::env::var("PATH").unwrap_or_default();
@@ -780,25 +780,25 @@ fn run_builtin(tokens: Vec<String>) {
                         let full_path = format!("{}/{}", path, args[0]);
                         if let Ok(metadata) = std::fs::metadata(&full_path) {
                             if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
-                                let _ = writeln!(std::io::stdout(), "{} is {}", args[0], full_path);
+                                let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{} is {}", args[0], full_path));
                                 return;
                             }
                         }
                     }
-                    let _ = writeln!(std::io::stdout(), "{}: not found", args[0]);
+                    let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{}: not found", args[0]));
                 }
             }
         }
         "pwd" => {
             let current = env::current_dir();
             match current {
-                Ok(path) => { let _ = writeln!(std::io::stdout(), "{}", path.display()); },
-                Err(_e) => { let _ = writeln!(std::io::stdout(), "{}: command not found", command); },
+                Ok(path) => { let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{}", path.display())); },
+                Err(_e) => { let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{}: command not found", command)); },
             }
         }
         "cd" => {
             if args.is_empty() {
-                let _ = writeln!(std::io::stdout(), "cd: missing argument");
+                let _ = writeln_ignore_broken_pipe(std::io::stdout(), "cd: missing argument");
                 return;
             }
             let mut target = args[0].to_string();
@@ -811,13 +811,21 @@ fn run_builtin(tokens: Vec<String>) {
                 Ok(_) => {}
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::NotFound {
-                        let _ = writeln!(std::io::stdout(), "cd: {}: No such file or directory", args[0]);
+                        let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("cd: {}: No such file or directory", args[0]));
                     } else {
-                        let _ = writeln!(std::io::stdout(), "cd: {}", e);
+                        let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("cd: {}", e));
                     }
                 }
             }
         }
         _ => unreachable!(),
+    }
+}
+
+fn writeln_ignore_broken_pipe<W: std::io::Write, S: AsRef<str>>(mut w: W, s: S) -> std::io::Result<()> {
+    use std::io::Write;
+    match writeln!(w, "{}", s.as_ref()) {
+        Err(ref e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
     }
 }
