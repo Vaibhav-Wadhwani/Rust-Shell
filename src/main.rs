@@ -98,19 +98,18 @@ impl Shell {
         let path_var = std::env::var("PATH").ok()?;
         let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
 
+        let mut found = None;
         for path in paths {
             let path = Path::new(path);
             if !path.is_absolute() {
                 continue;
             }
-
             let file_path = path.join(cmd);
             if file_path.is_file() {
-                return Some(file_path);
+                found = Some(file_path);
             }
         }
-
-        None
+        found
     }
 
     fn process_line(&self, line: &str) -> Vec<String> {
