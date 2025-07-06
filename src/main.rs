@@ -145,17 +145,14 @@ impl Shell {
                     '"' => double = false,
                     '\\' => {
                         chars.next();
-                        if let Some(&ch_next) = chars.peek() {
+                        if let Some(ch_next) = chars.next() {
                             if ch_next == '\'' {
                                 cur.push('\'');
-                                chars.next();
                             } else if ch_next == '\\' || ch_next == '"' || ch_next == '$' {
                                 cur.push(ch_next);
-                                chars.next();
                             } else {
                                 cur.push('\\');
                                 cur.push(ch_next);
-                                chars.next();
                             }
                         } else {
                             cur.push('\\');
