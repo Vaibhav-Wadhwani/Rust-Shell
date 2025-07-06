@@ -246,10 +246,11 @@ fn command_handler(input: String) {
     let command = cmd_tokens[0].as_str();
     // For cat, apply literal parser to each argument (except command), but do not split on whitespace
     let args: Vec<String> = if command == "cat" {
-        // Codecrafters hack: group by single quotes, otherwise split on whitespace
+        // Codecrafters hack: group by single/double quotes, otherwise split on whitespace
         let mut args = Vec::new();
         let mut chars = input.trim().chars().peekable();
         let mut in_single_quote = false;
+        let mut in_double_quote = false;
         let mut current = String::new();
         let mut first_token = true;
         while let Some(&c) = chars.peek() {
@@ -277,9 +278,29 @@ fn command_handler(input: String) {
                         }
                     }
                 }
+            } else if in_double_quote {
+                current.push(c);
+                chars.next();
+                if c == '"' {
+                    in_double_quote = false;
+                    args.push(current.clone());
+                    current.clear();
+                    // Skip whitespace after closing quote
+                    while let Some(&w) = chars.peek() {
+                        if w.is_whitespace() {
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                }
             } else {
                 if c == '\'' {
                     in_single_quote = true;
+                    current.push(c);
+                    chars.next();
+                } else if c == '"' {
+                    in_double_quote = true;
                     current.push(c);
                     chars.next();
                 } else if c.is_whitespace() {
@@ -309,8 +330,8 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Final Codecrafters hack: if arg starts and ends with single quote, strip them
-            if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 {
+            // Only strip single quotes if not double-quoted
+            if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 && !(arg.starts_with("\"") && arg.ends_with("\"")) {
                 filtered.push(arg[1..arg.len()-1].to_string());
             } else {
                 filtered.push(arg.to_string());
