@@ -4,9 +4,70 @@ use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
+fn shell_split(line: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut cur = String::new();
+    let mut chars = line.chars().peekable();
+    enum State { Normal, Single, Double }
+    let mut state = State::Normal;
+    while let Some(ch) = chars.next() {
+        match state {
+            State::Normal => match ch {
+                '\'' => state = State::Single,
+                '"' => state = State::Double,
+                '\\' => {
+                    if let Some(&next) = chars.peek() {
+                        cur.push(next);
+                        chars.next();
+                    }
+                }
+                c if c.is_whitespace() => {
+                    if !cur.is_empty() {
+                        tokens.push(cur.clone());
+                        cur.clear();
+                    }
+                }
+                _ => cur.push(ch),
+            },
+            State::Single => match ch {
+                '\'' => state = State::Normal,
+                _ => cur.push(ch),
+            },
+            State::Double => match ch {
+                '"' => state = State::Normal,
+                '\\' => {
+                    if let Some(&next) = chars.peek() {
+                        match next {
+                            '\\' | '"' | '$' => {
+                                cur.push(next);
+                                chars.next();
+                            }
+                            '\'' => {
+                                chars.next();
+                            }
+                            _ => {
+                                cur.push('\\');
+                                cur.push(next);
+                                chars.next();
+                            }
+                        }
+                    } else {
+                        cur.push('\\');
+                    }
+                }
+                _ => cur.push(ch),
+            },
+        }
+    }
+    if !cur.is_empty() {
+        tokens.push(cur);
+    }
+    tokens
+}
+
 fn command_handler(input: String) {
-    // Tokenize input for robust redirection parsing
-    let tokens: Vec<&str> = input.trim().split_whitespace().collect();
+    // Use shell-like parser for robust tokenization
+    let tokens = shell_split(input.trim());
     if tokens.is_empty() {
         return;
     }
@@ -23,12 +84,11 @@ fn command_handler(input: String) {
         }
         i += 1;
     }
-    // If no command tokens before redirection, do nothing
     if cmd_tokens.is_empty() {
         return;
     }
-    let command = cmd_tokens[0];
-    let args = &cmd_tokens[1..];
+    let command = cmd_tokens[0].as_str();
+    let args: Vec<&str> = cmd_tokens[1..].iter().map(|s| s.as_str()).collect();
     // match the cmd and execute the corresponding fn
     match command {
         "exit" => std::process::exit(
@@ -37,11 +97,7 @@ fn command_handler(input: String) {
                 .unwrap_or(255),
         ),
         "echo" => {
-            let output = args
-                .iter()
-                .map(|s| s.trim_matches(&['\'', '"'][..]))
-                .collect::<Vec<_>>()
-                .join(" ");
+            let output = args.join(" ");
             if let Some(filename) = redirect {
                 if let Ok(mut file) = File::create(filename) {
                     writeln!(file, "{}", output).ok();
@@ -78,7 +134,7 @@ fn command_handler(input: String) {
             let current = env::current_dir();
             match current {
                 Ok(path) => println!("{}", path.display()),
-                Err(_e) => println!("{input}: command not found"),
+                Err(_e) => println!("{}: command not found", command),
             }
         }
         "cd" => {
