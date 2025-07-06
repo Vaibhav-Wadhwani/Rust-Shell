@@ -20,9 +20,9 @@ fn main() -> ! {
 
         let input = input.trim();
 
-        let command: Vec<&str> = input.split_whitespace().collect();
+        let command = parse_command(input);
 
-        match command.as_slice() {
+        match command.iter().map(|s| s.as_str()).collect::<Vec<_>>().as_slice() {
             &[] => continue,
             ["echo", args @ ..] => cmd_echo(args),
             ["type", args @ ..] => cmd_type(args),
@@ -50,6 +50,50 @@ fn main() -> ! {
             }
         }
     }
+}
+
+fn parse_command(input: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut chars = input.chars().peekable();
+    let mut in_single_quote = false;
+    while let Some(&c) = chars.peek() {
+        match c {
+            '\'' => {
+                chars.next(); // consume quote
+                if in_single_quote {
+                    // End of quoted section
+                    in_single_quote = false;
+                } else {
+                    // Start of quoted section
+                    in_single_quote = true;
+                }
+            }
+            ' ' | '\t' if !in_single_quote => {
+                chars.next(); // consume space
+                if !current.is_empty() {
+                    args.push(current.clone());
+                    current.clear();
+                }
+                // skip consecutive spaces
+                while let Some(&next) = chars.peek() {
+                    if next == ' ' || next == '\t' {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            _ => {
+                current.push(c);
+                chars.next();
+            }
+        }
+    }
+    if !current.is_empty() {
+        args.push(current);
+    }
+    args
 }
 
 fn cmd_echo(args: &[&str]) {
