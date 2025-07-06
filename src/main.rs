@@ -117,7 +117,6 @@ impl Shell {
             let exec = exists && file_path.metadata().map(|m| m.permissions().mode() & 0o111 != 0).unwrap_or(false);
             #[cfg(not(unix))]
             let exec = exists;
-            eprintln!("[DEBUG] Checking: {} Exists: {} Executable: {}", file_path.display(), exists, exec);
             if exec {
                 return Some(file_path);
             }
