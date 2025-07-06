@@ -165,8 +165,7 @@ impl Shell {
                                     chars.next();
                                 }
                                 '\'' => {
-                                    // Codecrafters: drop backslash before single quote in double quotes
-                                    cur.push('\'');
+                                    // Codecrafters: drop both backslash and single quote in double quotes
                                     chars.next();
                                 }
                                 _ => {
