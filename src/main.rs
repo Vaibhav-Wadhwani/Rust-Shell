@@ -11,10 +11,10 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::{Validator, ValidationContext, ValidationResult};
 use std::cell::RefCell;
-use nix::unistd::{fork, ForkResult, pipe, dup2, close, execvp, write as nix_write};
+use nix::unistd::{fork, ForkResult, pipe, dup2, close, execvp};
 use nix::sys::wait::waitpid;
-use nix::unistd::_exit;
 use std::ffi::CString;
+use libc;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -167,7 +167,7 @@ fn command_handler(input: String) {
                 close(write_end).ok();
                 let cmd = CString::new(left_tokens[0].clone()).unwrap();
                 let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                execvp(&cmd, &args).unwrap_or_else(|_| _exit(127));
+                execvp(&cmd, &args).unwrap_or_else(|_| { libc::_exit(127) });
             }
             Ok(ForkResult::Parent { child: left_pid }) => {
                 // Right child (consumer)
@@ -178,7 +178,7 @@ fn command_handler(input: String) {
                         close(read_end).ok();
                         let cmd = CString::new(right_tokens[0].clone()).unwrap();
                         let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                        execvp(&cmd, &args).unwrap_or_else(|_| _exit(127));
+                        execvp(&cmd, &args).unwrap_or_else(|_| { libc::_exit(127) });
                     }
                     Ok(ForkResult::Parent { child: right_pid }) => {
                         close(read_end).ok();
