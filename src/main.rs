@@ -330,17 +330,8 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Remove all single/double quotes and backslashes from last path component
-            let mut processed = arg.to_string();
-            if let Some(pos) = processed.rfind('/') {
-                let (prefix, last) = processed.split_at(pos + 1);
-                let last = last.replace(['"', '\'', '\\'], "");
-                processed = format!("{}{}", prefix, last);
-            } else {
-                processed = processed.replace(['"', '\'', '\\'], "");
-            }
-            // Also strip leading/trailing single/double quotes from the entire argument
-            processed = processed.trim_matches(['"', '\''].as_ref()).to_string();
+            // Remove all single/double quotes and backslashes from the entire argument
+            let processed = arg.replace(['"', '\'', '\\'], "");
             filtered.push(processed);
         }
         filtered
