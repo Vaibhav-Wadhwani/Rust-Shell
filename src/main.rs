@@ -26,7 +26,8 @@ fn main() -> ! {
             [cmd, args @ ..] => {
                 // Try to run as external command
                 if let Some(exec_path) = find_in_path(cmd) {
-                    let mut child = std::process::Command::new(exec_path)
+                    let child = std::process::Command::new(exec_path)
+                        .arg0(cmd)
                         .args(args)
                         .spawn();
                     match child {
