@@ -131,13 +131,16 @@ fn command_handler(input: String) {
         // Use shell-like parsing for builtins
         let tokens = tokens_shell;
         let mut redirect = None;
+        let mut redirect_append = None;
         let mut stderr_redirect = None;
         let mut filtered_tokens = Vec::new();
         let mut i = 0;
         while i < tokens.len() {
-            if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>") && i + 1 < tokens.len() {
+            if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>" || tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.len() {
                 if tokens[i] == ">" || tokens[i] == "1>" {
                     redirect = Some(tokens[i + 1].to_string());
+                } else if tokens[i] == ">>" || tokens[i] == "1>>" {
+                    redirect_append = Some(tokens[i + 1].to_string());
                 } else if tokens[i] == "2>" {
                     stderr_redirect = Some(tokens[i + 1].to_string());
                 }
@@ -166,6 +169,10 @@ fn command_handler(input: String) {
                 let output = args.join(" ");
                 if let Some(filename) = redirect {
                     if let Ok(mut file) = File::create(filename) {
+                        writeln!(file, "{}", output).ok();
+                    }
+                } else if let Some(filename) = redirect_append {
+                    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
                         writeln!(file, "{}", output).ok();
                     }
                 } else {
@@ -236,13 +243,16 @@ fn command_handler(input: String) {
     }
     // Redirection parsing for external commands
     let mut redirect = None;
+    let mut redirect_append = None;
     let mut stderr_redirect = None;
     let mut filtered_tokens = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
-        if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>") && i + 1 < tokens.len() {
+        if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>" || tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.len() {
             if tokens[i] == ">" || tokens[i] == "1>" {
                 redirect = Some(tokens[i + 1].to_string());
+            } else if tokens[i] == ">>" || tokens[i] == "1>>" {
+                redirect_append = Some(tokens[i + 1].to_string());
             } else if tokens[i] == "2>" {
                 stderr_redirect = Some(tokens[i + 1].to_string());
             }
@@ -317,7 +327,7 @@ fn command_handler(input: String) {
                 skip = false;
                 continue;
             }
-            if arg == ">" || arg == "1>" || arg == "2>" {
+            if arg == ">" || arg == "1>" || arg == "2>" || arg == ">>" || arg == "1>>" {
                 skip = true;
                 continue;
             }
@@ -348,6 +358,11 @@ fn command_handler(input: String) {
         "cat" => {
             let mut output: Box<dyn Write> = if let Some(filename) = &redirect {
                 match File::create(filename) {
+                    Ok(file) => Box::new(file),
+                    Err(_) => Box::new(io::stdout()),
+                }
+            } else if let Some(filename) = &redirect_append {
+                match std::fs::OpenOptions::new().create(true).append(true).open(filename) {
                     Ok(file) => Box::new(file),
                     Err(_) => Box::new(io::stdout()),
                 }
@@ -385,6 +400,10 @@ fn command_handler(input: String) {
                         if let Ok(file) = File::create(filename) {
                             cmd.stdout(file);
                         }
+                    } else if let Some(filename) = &redirect_append {
+                        if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
+                            cmd.stdout(file);
+                        }
                     }
                     if let Some(filename) = &stderr_redirect {
                         if let Ok(file) = File::create(filename) {
@@ -402,6 +421,10 @@ fn command_handler(input: String) {
                 cmd.args(args.clone());
                 if let Some(filename) = redirect {
                     if let Ok(file) = File::create(filename) {
+                        cmd.stdout(file);
+                    }
+                } else if let Some(filename) = &redirect_append {
+                    if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
                         cmd.stdout(file);
                     }
                 }
