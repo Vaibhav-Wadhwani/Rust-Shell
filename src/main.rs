@@ -230,10 +230,10 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Apply literal parser to the argument string, but join the result as a single argument
+            // Apply literal parser to the argument string, join with space if multiple tokens
             let lit = shell_split_literal(&tokens[i]);
             if !lit.is_empty() {
-                filtered.push(lit.join(""));
+                filtered.push(lit.join(" "));
             } else {
                 filtered.push(tokens[i].clone());
             }
