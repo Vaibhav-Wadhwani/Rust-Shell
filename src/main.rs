@@ -310,12 +310,16 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Only strip outer single quotes if not inside double quotes
-            let processed = if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 && !(arg.starts_with("\"") && arg.ends_with("\"")) {
+            // Strip outer double quotes if present
+            let mut processed = if arg.starts_with('"') && arg.ends_with('"') && arg.len() >= 2 {
                 arg[1..arg.len()-1].to_string()
             } else {
                 arg.clone()
             };
+            // Only strip outer single quotes if not inside double quotes
+            if processed.starts_with("'") && processed.ends_with("'") && processed.len() >= 2 && !(arg.starts_with('"') && arg.ends_with('"')) {
+                processed = processed[1..processed.len()-1].to_string();
+            }
             filtered.push(processed);
         }
         filtered
