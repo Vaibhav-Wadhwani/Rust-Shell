@@ -617,7 +617,9 @@ fn main() {
                     print!("\x07");
                     std::io::Write::flush(&mut std::io::stdout()).ok();
                 } else if tab_count == 2 {
-                    println!("{}", matches.join("  "));
+                    let mut sorted_matches = matches.clone();
+                    sorted_matches.sort();
+                    println!("{}", sorted_matches.join("  "));
                     print!("$ {}", prefix);
                     std::io::Write::flush(&mut std::io::stdout()).ok();
                     *c.tab_count.borrow_mut() = 0;
