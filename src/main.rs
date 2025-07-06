@@ -32,20 +32,6 @@ fn parse_shell_line(line: &str) -> (Vec<String>, Option<String>) {
                 _ => cur.push(ch),
             },
             State::Single => match ch {
-                '\\' => {
-                    if let Some(&next) = chars.peek() {
-                        if next == '\'' {
-                            cur.push('\'');
-                            chars.next();
-                        } else {
-                            cur.push('\\');
-                            cur.push(next);
-                            chars.next();
-                        }
-                    } else {
-                        cur.push('\\');
-                    }
-                }
                 '\'' => state = State::Normal,
                 _ => cur.push(ch),
             },
