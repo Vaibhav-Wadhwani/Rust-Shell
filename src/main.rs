@@ -4,6 +4,9 @@ use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use itertools::Itertools;
+use rustyline::error::ReadlineError;
+use rustyline::{Editor, Helper, Context, CompletionType, Config};
+use rustyline::completion::{Completer, Pair};
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -488,12 +491,49 @@ pub fn check_for_executable(program_name: &str) -> bool {
     false
 }
 
+struct BuiltinCompleter;
+
+impl Completer for BuiltinCompleter {
+    type Candidate = Pair;
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        let prefix = &line[..pos];
+        let mut completions = Vec::new();
+        if "echo".starts_with(prefix) {
+            completions.push(Pair {
+                display: "echo".to_string(),
+                replacement: "echo ".to_string(),
+            });
+        }
+        if "exit".starts_with(prefix) {
+            completions.push(Pair {
+                display: "exit".to_string(),
+                replacement: "exit ".to_string(),
+            });
+        }
+        Ok((0, completions))
+    }
+}
+
+impl Helper for BuiltinCompleter {}
+
 fn main() {
+    let config = Config::builder().completion_type(CompletionType::List).build();
+    let mut rl = Editor::with_config(config);
+    rl.set_helper(Some(BuiltinCompleter));
     loop {
-        print!("$ ");
-        io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-        command_handler(input.clone());
+        let readline = rl.readline("$ ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str());
+                command_handler(line);
+            }
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                break;
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
+            }
+        }
     }
 }
