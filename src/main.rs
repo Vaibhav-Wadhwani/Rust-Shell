@@ -151,11 +151,6 @@ impl Shell {
                                     cur.push(ch_next);
                                     chars.next();
                                 }
-                                '\'' => {
-                                    // Codecrafters: drop backslash before single quote in double quotes
-                                    cur.push('\'');
-                                    chars.next();
-                                }
                                 _ => {
                                     cur.push('\\');
                                     cur.push(ch_next);
@@ -169,7 +164,7 @@ impl Shell {
                     _ => cur.push(ch),
                 }
             } else {
-                // Check for > or 1>
+                // Redirection: > or 1>
                 if ch == '>' || (ch == '1' && chars.clone().nth(1) == Some('>')) {
                     if !cur.is_empty() {
                         tokens.push(cur.clone());
