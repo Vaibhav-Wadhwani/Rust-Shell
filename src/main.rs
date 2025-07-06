@@ -168,7 +168,18 @@ fn cmd_pwd() {
 }
 
 fn cmd_cd(path: &str) {
-    if let Err(_) = std::env::set_current_dir(path) {
+    let target = if path == "~" {
+        match std::env::var("HOME") {
+            Ok(home) => home,
+            Err(_) => {
+                println!("cd: HOME not set");
+                return;
+            }
+        }
+    } else {
+        path.to_string()
+    };
+    if let Err(_) = std::env::set_current_dir(&target) {
         println!("cd: {}: No such file or directory", path);
     }
 }
