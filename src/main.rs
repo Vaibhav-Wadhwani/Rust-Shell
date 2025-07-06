@@ -67,6 +67,11 @@ fn parse_command(input: &str) -> Vec<String> {
                             current.push(next);
                             chars.next();
                         }
+                        '\'' | '"' => {
+                            current.push('\\');
+                            current.push(next);
+                            chars.next();
+                        }
                         _ => {
                             current.push('\\');
                             current.push(next);
