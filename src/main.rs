@@ -10,15 +10,12 @@ fn shell_split(line: &str) -> Vec<String> {
     let mut chars = line.chars().peekable();
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
-    let mut original_pieces = Vec::new();
-    let mut piece_start = 0;
     let mut idx = 0;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
                 '\'' => {
                     state = State::Single;
-                    piece_start = idx + 1;
                 },
                 '"' => state = State::Double,
                 '\\' => {
