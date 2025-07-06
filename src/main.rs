@@ -75,7 +75,7 @@ fn cmd_type(args: &[&str]) {
 
     // Check for builtins
     match cmd {
-        "type" | "echo" | "exit" => {
+        "type" | "echo" | "exit" | "pwd" => {
             println!("{} is a shell builtin", cmd);
             return;
         },
