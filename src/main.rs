@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{exit, Command};
 
 type Builtin = fn(&mut Shell, &[String]) -> Result<(), String>;
@@ -74,6 +74,8 @@ impl Shell {
         let new_cwd = if arg == "~" {
             let home = std::env::var("HOME").map_err(|e| e.to_string())?;
             PathBuf::from(home)
+        } else if std::path::Path::new(arg).is_absolute() {
+            PathBuf::from(arg)
         } else {
             self.cwd.join(arg)
         };
