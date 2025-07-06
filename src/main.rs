@@ -246,19 +246,20 @@ fn command_handler(input: String) {
     let command = cmd_tokens[0].as_str();
     // For cat, apply literal parser to each argument (except command), but do not split on whitespace
     let args: Vec<String> = if command == "cat" {
-        let lit_tokens = shell_split_literal(input.trim());
+        // Strict literal: split on spaces, do not process quotes or backslashes
+        let mut tokens: Vec<&str> = input.trim().split_whitespace().collect();
         let mut filtered = Vec::new();
         let mut skip = false;
-        for i in 1..lit_tokens.len() {
+        for i in 1..tokens.len() {
             if skip {
                 skip = false;
                 continue;
             }
-            if lit_tokens[i] == ">" || lit_tokens[i] == "1>" {
+            if tokens[i] == ">" || tokens[i] == "1>" {
                 skip = true;
                 continue;
             }
-            filtered.push(lit_tokens[i].to_string());
+            filtered.push(tokens[i].to_string());
         }
         filtered
     } else {
