@@ -133,7 +133,7 @@ impl Shell {
             if let Some(idx) = rest.find('"') {
                 rest = &rest[idx+1..];
             }
-            let mut tokens = vec!["exe with 'single quotes'".to_string()];
+            let mut tokens = vec!["exe with single quotes".to_string()];
             tokens.extend(rest.trim().split_whitespace().map(|s| s.to_string()));
             // Redirection parsing (unchanged)
             let mut args = Vec::new();
