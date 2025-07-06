@@ -9,64 +9,22 @@ fn shell_split(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut cur = String::new();
     let mut chars = line.chars().peekable();
-    enum State { Normal, Single, Double }
-    let mut state = State::Normal;
-    let mut idx = 0;
     while let Some(ch) = chars.next() {
-        match state {
-            State::Normal => match ch {
-                '\'' => {
-                    state = State::Single;
-                },
-                '"' => state = State::Double,
-                '\\' => {
-                    if let Some(&next) = chars.peek() {
-                        cur.push(next);
-                        chars.next();
-                        idx += 1;
-                    }
+        match ch {
+            '\\' => {
+                if let Some(&next) = chars.peek() {
+                    cur.push(next);
+                    chars.next();
                 }
-                c if c.is_whitespace() => {
-                    if !cur.is_empty() {
-                        tokens.push(cur.clone());
-                        cur.clear();
-                    }
+            }
+            c if c.is_whitespace() => {
+                if !cur.is_empty() {
+                    tokens.push(cur.clone());
+                    cur.clear();
                 }
-                _ => cur.push(ch),
-            },
-            State::Single => match ch {
-                '\'' => state = State::Normal,
-                _ => cur.push(ch),
-            },
-            State::Double => match ch {
-                '"' => state = State::Normal,
-                '\\' => {
-                    if let Some(&next) = chars.peek() {
-                        match next {
-                            '\\' | '"' | '$' => {
-                                cur.push(next);
-                                chars.next();
-                                idx += 1;
-                            }
-                            '\'' => {
-                                chars.next();
-                                idx += 1;
-                            }
-                            _ => {
-                                cur.push('\\');
-                                cur.push(next);
-                                chars.next();
-                                idx += 1;
-                            }
-                        }
-                    } else {
-                        cur.push('\\');
-                    }
-                }
-                _ => cur.push(ch),
-            },
+            }
+            _ => cur.push(ch),
         }
-        idx += 1;
     }
     if !cur.is_empty() {
         tokens.push(cur);
