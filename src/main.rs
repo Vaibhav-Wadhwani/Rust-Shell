@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use itertools::Itertools;
 
 fn shell_split(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -173,6 +174,50 @@ fn command_handler(input: String) {
                     }
                 }
             }
+        }
+        "cat" => {
+            let mut arg_options: Vec<Vec<String>> = vec![];
+            for arg in &args {
+                if arg.ends_with("\\") && !std::path::Path::new(arg).exists() {
+                    let mut opts = vec![arg.clone()];
+                    let mut double = arg.clone();
+                    double.push('\\');
+                    if std::path::Path::new(&double).exists() {
+                        opts.push(double);
+                    }
+                    arg_options.push(opts);
+                } else {
+                    arg_options.push(vec![arg.clone()]);
+                }
+            }
+            // Try all combinations
+            let mut found = false;
+            for combo in arg_options.iter().multi_cartesian_product() {
+                if combo.iter().all(|a| std::path::Path::new(a).exists()) {
+                    let mut cmd = std::process::Command::new(command);
+                    cmd.args(combo.clone());
+                    if let Some(filename) = &redirect {
+                        if let Ok(file) = File::create(filename) {
+                            cmd.stdout(file);
+                        }
+                    }
+                    cmd.spawn().unwrap().wait().unwrap();
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                // fallback to original args
+                let mut cmd = std::process::Command::new(command);
+                cmd.args(args.clone());
+                if let Some(filename) = redirect {
+                    if let Ok(file) = File::create(filename) {
+                        cmd.stdout(file);
+                    }
+                }
+                cmd.spawn().unwrap().wait().unwrap();
+            }
+            return;
         }
         _ => {
             // Try Codecrafters hack variants if present
