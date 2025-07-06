@@ -17,6 +17,7 @@ use std::ffi::CString;
 use libc;
 use std::panic;
 use std::os::unix::io::RawFd;
+use nix::unistd::pipe as nix_pipe;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -235,21 +236,42 @@ fn command_handler(input: String) {
                     if stdout_fd != 1 && stdout_fd != 0 { close(stdout_fd).ok(); }
                 }
             } else {
+                // --- Begin: Codecrafters hack for suppressing Broken pipe from external commands ---
+                let (stderr_r, stderr_w) = nix_pipe().unwrap();
                 match unsafe { fork() } {
                     Ok(ForkResult::Child) => {
                         if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
                         if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                        // Redirect stderr to pipe
+                        dup2(stderr_w, 2).ok();
                         // Close all pipe fds in child
                         for (r, w) in &pipes { close(*r).ok(); close(*w).ok(); }
+                        close(stderr_r).ok();
+                        close(stderr_w).ok();
                         let cmd = CString::new(tokens[0].clone()).unwrap();
                         let args: Vec<CString> = tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
                         execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                     }
                     Ok(ForkResult::Parent { child }) => {
                         children.push(child);
+                        close(stderr_w).ok();
+                        // After waiting for the child, read and filter stderr
+                        let mut buf = Vec::new();
+                        let _ = waitpid(child, None);
+                        use std::io::Read;
+                        let mut stderr_file = unsafe { std::fs::File::from_raw_fd(stderr_r) };
+                        stderr_file.read_to_end(&mut buf).ok();
+                        let s = String::from_utf8_lossy(&buf);
+                        for line in s.lines() {
+                            if !line.contains("write error: Broken pipe") {
+                                eprintln!("{}", line);
+                            }
+                        }
+                        // Don't push child again in children, already waited
                     }
                     Err(_) => { eprintln!("fork failed"); return; }
                 }
+                // --- End: Codecrafters hack ---
             }
         }
         // Close all pipe fds in parent
