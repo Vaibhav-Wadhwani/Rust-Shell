@@ -98,7 +98,6 @@ impl Shell {
 
     fn find_command(&self, cmd: &str) -> Option<PathBuf> {
         let path_var = std::env::var("PATH").ok()?;
-        eprintln!("[DEBUG] PATH: {}", path_var);
         let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
 
         for path in paths {
@@ -107,7 +106,6 @@ impl Shell {
                 continue;
             }
             let file_path = path.join(cmd);
-            eprintln!("[DEBUG] Checking: {} Exists: {}", file_path.display(), file_path.is_file());
             if file_path.is_file() {
                 return Some(file_path);
             }
