@@ -60,6 +60,21 @@ fn parse_command(input: &str) -> Vec<String> {
     let mut in_double_quote = false;
     while let Some(c) = chars.next() {
         match c {
+            '\\' if in_double_quote => {
+                if let Some(&next) = chars.peek() {
+                    match next {
+                        '\\' | '"' | '$' => {
+                            current.push(next);
+                            chars.next();
+                        }
+                        _ => {
+                            current.push('\\');
+                            current.push(next);
+                            chars.next();
+                        }
+                    }
+                }
+            }
             '\\' if !in_single_quote => {
                 if let Some(&next) = chars.peek() {
                     match next {
