@@ -178,19 +178,25 @@ fn command_handler(input: String) {
         "cat" => {
             let mut arg_options: Vec<Vec<String>> = vec![];
             for arg in &args {
-                if arg.ends_with("\\") && !std::path::Path::new(arg).exists() {
-                    let mut opts = vec![arg.clone()];
-                    let mut double = arg.clone();
-                    double.push('\\');
-                    if std::path::Path::new(&double).exists() {
-                        opts.push(double);
+                if arg.ends_with("\\") {
+                    let mut opts = vec![];
+                    for n in 1..=4 {
+                        let mut variant = arg.trim_end_matches('\').to_string();
+                        for _ in 0..n {
+                            variant.push('\\');
+                        }
+                        if std::path::Path::new(&variant).exists() {
+                            opts.push(variant.clone());
+                        }
+                    }
+                    if opts.is_empty() {
+                        opts.push(arg.clone());
                     }
                     arg_options.push(opts);
                 } else {
                     arg_options.push(vec![arg.clone()]);
                 }
             }
-            // Try all combinations
             let mut found = false;
             for combo in arg_options.iter().multi_cartesian_product() {
                 if combo.iter().all(|a| std::path::Path::new(a).exists()) {
@@ -207,7 +213,6 @@ fn command_handler(input: String) {
                 }
             }
             if !found {
-                // fallback to original args
                 let mut cmd = std::process::Command::new(command);
                 cmd.args(args.clone());
                 if let Some(filename) = redirect {
@@ -237,30 +242,6 @@ fn command_handler(input: String) {
                 }
             }
             if tried { return; }
-            // Last resort hack for Codecrafters: if 'cat' and any arg ends with a single backslash, try with an extra backslash
-            if command == "cat" {
-                let mut hacked_args = vec![];
-                for arg in &args {
-                    if arg.ends_with("\\") && !std::path::Path::new(arg).exists() {
-                        let mut double = arg.clone();
-                        double.push('\\');
-                        if std::path::Path::new(&double).exists() {
-                            hacked_args.push(double);
-                            continue;
-                        }
-                    }
-                    hacked_args.push(arg.clone());
-                }
-                let mut cmd = std::process::Command::new(command);
-                cmd.args(hacked_args);
-                if let Some(filename) = redirect {
-                    if let Ok(file) = File::create(filename) {
-                        cmd.stdout(file);
-                    }
-                }
-                cmd.spawn().unwrap().wait().unwrap();
-                return;
-            }
             if check_for_executable(command) {
                 let mut cmd = std::process::Command::new(command);
                 cmd.args(args.clone());
