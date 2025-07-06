@@ -124,67 +124,123 @@ impl Shell {
         None
     }
 
-    fn process_line(&self, line: &str) -> Vec<String> {
+    fn process_line(&self, line: &str) -> (Vec<String>, Option<String>) {
+        // Parse for redirection: > or 1>
+        let mut tokens = Vec::new();
+        let mut redir: Option<String> = None;
         let mut single = false;
         let mut double = false;
-        let mut groups = Vec::new();
         let mut cur = String::new();
-
-        let mut chars = line.chars();
-        while let Some(ch) = chars.next() {
+        let mut chars = line.chars().peekable();
+        while let Some(&ch) = chars.peek() {
             if single {
+                chars.next();
                 match ch {
                     '\'' => single = false,
                     _ => cur.push(ch),
-                };
+                }
             } else if double {
+                chars.next();
                 match ch {
                     '"' => double = false,
                     '\\' => {
-                        let Some(ch_next) = chars.next() else {
-                            break;
-                        };
-                        if !['\\', '$', '"'].contains(&ch_next) {
-                            cur.push(ch);
+                        chars.next();
+                        if let Some(&ch_next) = chars.peek() {
+                            if !['\\', '$', '"'].contains(&ch_next) {
+                                cur.push('\\');
+                            }
+                            cur.push(ch_next);
+                            chars.next();
                         }
-                        cur.push(ch_next);
                     }
                     _ => cur.push(ch),
-                };
+                }
             } else {
-                match ch {
-                    '\'' => single = true,
-                    '"' => double = true,
-                    '\\' => {
-                        let Some(ch_next) = chars.next() else {
-                            break;
-                        };
-                        cur.push(ch_next);
+                // Check for > or 1>
+                if ch == '>' || (ch == '1' && chars.clone().nth(1) == Some('>')) {
+                    // Push current token if any
+                    if !cur.is_empty() {
+                        tokens.push(cur.clone());
+                        cur.clear();
                     }
-                    ch if ch.is_whitespace() => {
-                        if !cur.is_empty() {
-                            groups.push(cur);
-                            cur = String::new();
+                    // Consume '1' if present
+                    if ch == '1' {
+                        chars.next();
+                    }
+                    // Consume '>'
+                    chars.next();
+                    // Skip whitespace
+                    while let Some(&c) = chars.peek() {
+                        if c.is_whitespace() {
+                            chars.next();
+                        } else {
+                            break;
                         }
                     }
-                    _ => cur.push(ch),
-                };
+                    // Parse filename
+                    let mut fname = String::new();
+                    let mut in_single = false;
+                    let mut in_double = false;
+                    while let Some(&c) = chars.peek() {
+                        if !in_single && !in_double && c.is_whitespace() {
+                            break;
+                        }
+                        if c == '\'' && !in_double {
+                            in_single = !in_single;
+                            chars.next();
+                            continue;
+                        }
+                        if c == '"' && !in_single {
+                            in_double = !in_double;
+                            chars.next();
+                            continue;
+                        }
+                        fname.push(c);
+                        chars.next();
+                    }
+                    redir = Some(fname);
+                } else {
+                    match ch {
+                        '\'' => { single = true; chars.next(); },
+                        '"' => { double = true; chars.next(); },
+                        '\\' => {
+                            chars.next();
+                            if let Some(&ch_next) = chars.peek() {
+                                cur.push(ch_next);
+                                chars.next();
+                            }
+                        }
+                        c if c.is_whitespace() => {
+                            chars.next();
+                            if !cur.is_empty() {
+                                tokens.push(cur.clone());
+                                cur.clear();
+                            }
+                        }
+                        _ => { cur.push(ch); chars.next(); },
+                    }
+                }
             }
         }
-
         if !cur.is_empty() {
-            groups.push(cur);
+            tokens.push(cur);
         }
-
-        groups
+        (tokens, redir)
     }
 
-    fn exec_command(&self, cmd: &str, args: &[String]) -> Result<(), String> {
-        let mut child = Command::new(cmd)
-            .args(args)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-
+    fn exec_command(&self, cmd: &str, args: &[String], redir: Option<&String>) -> Result<(), String> {
+        let mut command = Command::new(cmd);
+        command.args(args);
+        if let Some(filename) = redir {
+            use std::fs::File;
+            use std::os::unix::io::AsRawFd;
+            use std::os::unix::process::CommandExt;
+            let file = File::create(filename).map_err(|e| e.to_string())?;
+            unsafe {
+                command.stdout(std::process::Stdio::from_raw_fd(file.as_raw_fd()));
+            }
+        }
+        let mut child = command.spawn().map_err(|e| e.to_string())?;
         child.wait().map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -192,27 +248,37 @@ impl Shell {
     fn run(&mut self) {
         let stdin = io::stdin();
         let mut stdout = io::stdout();
-
         loop {
             print!("$ ");
             stdout.flush().unwrap();
-
             let mut input = String::new();
             stdin.read_line(&mut input).unwrap();
-
-            let parts: Vec<_> = self.process_line(input.as_str());
+            let (parts, redir) = self.process_line(input.as_str());
             let [cmd, args @ ..] = &parts[..] else {
                 continue;
             };
-
             let res = if let Some(builtin) = self.find_builtin(cmd) {
-                builtin(self, args)
+                if let Some(filename) = &redir {
+                    // Redirect stdout for builtins
+                    use std::fs::File;
+                    use std::os::unix::io::{AsRawFd, RawFd};
+                    use std::os::unix::prelude::FromRawFd;
+                    use std::io::Write;
+                    let file = File::create(filename).map_err(|e| e.to_string())?;
+                    let stdout_fd = 1; // STDOUT_FILENO
+                    let saved = unsafe { libc::dup(stdout_fd) };
+                    unsafe { libc::dup2(file.as_raw_fd(), stdout_fd) };
+                    let result = builtin(self, args);
+                    unsafe { libc::dup2(saved, stdout_fd); libc::close(saved); }
+                    result
+                } else {
+                    builtin(self, args)
+                }
             } else if self.find_command(cmd).is_some() {
-                self.exec_command(cmd, args)
+                self.exec_command(cmd, args, redir.as_ref())
             } else {
                 Err("command not found".into())
             };
-
             if let Err(err) = res {
                 println!("{cmd}: {err}");
             }
