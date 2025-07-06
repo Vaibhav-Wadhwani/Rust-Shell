@@ -100,13 +100,25 @@ impl Shell {
         let path_var = std::env::var("PATH").ok()?;
         let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
 
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt;
+
         for path in paths {
+            if path.is_empty() {
+                continue;
+            }
             let path = std::path::Path::new(path);
             if !path.is_absolute() {
                 continue;
             }
             let file_path = path.join(cmd);
-            if file_path.is_file() {
+            let exists = file_path.is_file();
+            #[cfg(unix)]
+            let exec = exists && file_path.metadata().map(|m| m.permissions().mode() & 0o111 != 0).unwrap_or(false);
+            #[cfg(not(unix))]
+            let exec = exists;
+            eprintln!("[DEBUG] Checking: {} Exists: {} Executable: {}", file_path.display(), exists, exec);
+            if exec {
                 return Some(file_path);
             }
         }
