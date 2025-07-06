@@ -27,6 +27,7 @@ fn main() -> ! {
             ["echo", args @ ..] => cmd_echo(args),
             ["type", args @ ..] => cmd_type(args),
             ["pwd"] => cmd_pwd(),
+            ["cd", path] => cmd_cd(path),
             ["exit", "0"] => exit(0),
             [cmd, args @ ..] => {
                 // Try to run as external command
@@ -163,5 +164,11 @@ fn cmd_pwd() {
     match std::env::current_dir() {
         Ok(path) => println!("{}", path.display()),
         Err(_) => println!("pwd: failed to get current directory"),
+    }
+}
+
+fn cmd_cd(path: &str) {
+    if let Err(_) = std::env::set_current_dir(path) {
+        println!("cd: {}: No such file or directory", path);
     }
 }
