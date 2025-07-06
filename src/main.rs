@@ -67,7 +67,7 @@ fn process_line(line: &str) -> Vec<String> {
     let mut groups = Vec::new();
     let mut cur = String::new();
 
-    let mut chars = line.chars();
+    let mut chars = line.chars().peekable();
     while let Some(ch) = chars.next() {
         if single {
             match ch {
@@ -78,13 +78,16 @@ fn process_line(line: &str) -> Vec<String> {
             match ch {
                 '"' => double = false,
                 '\\' => {
-                    let Some(ch_next) = chars.next() else {
-                        break;
-                    };
-                    if !['\\', '$', '"'].contains(&ch_next) {
-                        cur.push(ch);
+                    if let Some(&ch_next) = chars.peek() {
+                        if ch_next == '\\' || ch_next == '"' || ch_next == '$' {
+                            chars.next();
+                            cur.push(ch_next);
+                        } else {
+                            cur.push('\\');
+                            cur.push(ch_next);
+                            chars.next();
+                        }
                     }
-                    cur.push(ch_next);
                 }
                 _ => cur.push(ch),
             };
@@ -93,10 +96,19 @@ fn process_line(line: &str) -> Vec<String> {
                 '\'' => single = true,
                 '"' => double = true,
                 '\\' => {
-                    let Some(ch_next) = chars.next() else {
-                        break;
-                    };
-                    cur.push(ch_next);
+                    if let Some(&ch_next) = chars.peek() {
+                        match ch_next {
+                            ' ' | '\t' | '\n' | '\\' | '\'' => {
+                                chars.next();
+                                cur.push(ch_next);
+                            }
+                            _ => {
+                                cur.push('\\');
+                                cur.push(ch_next);
+                                chars.next();
+                            }
+                        }
+                    }
                 }
                 ch if ch.is_whitespace() => {
                     if !cur.is_empty() {
