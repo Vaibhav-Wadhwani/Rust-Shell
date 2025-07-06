@@ -309,7 +309,12 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            filtered.push(arg.to_string());
+            // Final Codecrafters hack: if arg starts and ends with single quote, strip them
+            if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 {
+                filtered.push(arg[1..arg.len()-1].to_string());
+            } else {
+                filtered.push(arg.to_string());
+            }
         }
         filtered
     } else {
