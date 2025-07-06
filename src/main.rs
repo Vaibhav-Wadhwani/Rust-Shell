@@ -683,7 +683,8 @@ fn main() {
     panic::set_hook(Box::new(move |info| {
         if let Some(s) = info.payload().downcast_ref::<&str>() {
             if s.contains("failed printing to stdout: Broken pipe") {
-                std::process::exit(0);
+                // Ignore the panic, do not exit
+                return;
             }
         }
         default_hook(info);
