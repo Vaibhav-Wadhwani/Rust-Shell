@@ -206,7 +206,24 @@ fn command_handler(input: String) {
     } else {
         tokens_lit[0].as_str()
     };
-    let args: Vec<String> = tokens_lit[1..].iter().map(|s| s.to_string()).collect();
+    // Redirection parsing for external commands
+    let mut redirect = None;
+    let mut cmd_tokens = tokens_lit.as_slice();
+    let mut i = 0;
+    while i < tokens_lit.len() {
+        if tokens_lit[i] == ">" || tokens_lit[i] == "1>" {
+            if i + 1 < tokens_lit.len() {
+                redirect = Some(tokens_lit[i + 1].to_string());
+                cmd_tokens = &tokens_lit[..i];
+            }
+            break;
+        }
+        i += 1;
+    }
+    if cmd_tokens.is_empty() {
+        return;
+    }
+    let args: Vec<String> = cmd_tokens[1..].iter().map(|s| s.to_string()).collect();
     // Codecrafters hack: handle quoted single quotes executable
     let mut exec_variants = vec![];
     if input.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
