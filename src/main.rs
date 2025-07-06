@@ -132,137 +132,100 @@ fn unescape_backslashes(s: &str) -> String {
 }
 
 fn command_handler(input: String) {
-    if let Some(pipe_pos) = {
-        let mut in_single = false;
-        let mut in_double = false;
-        let mut idx = None;
-        for (i, c) in input.chars().enumerate() {
-            match c {
-                '\'' if !in_double => in_single = !in_single,
-                '"' if !in_single => in_double = !in_double,
-                '|' if !in_single && !in_double => { idx = Some(i); break; },
-                _ => {}
+    // Multi-stage pipeline support
+    let mut stages = vec![];
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut last = 0;
+    let chars: Vec<char> = input.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            '|' if !in_single && !in_double => {
+                stages.push(input[last..i].trim().to_string());
+                last = i + 1;
             }
+            _ => {}
         }
-        idx
-    } {
-        let left = input[..pipe_pos].trim();
-        let right = input[pipe_pos+1..].trim();
-        if left.is_empty() || right.is_empty() {
-            return;
-        }
-        let left_tokens = shell_split_shell_like(left);
-        let right_tokens = shell_split_shell_like(right);
-        if left_tokens.is_empty() || right_tokens.is_empty() {
-            return;
-        }
+    }
+    stages.push(input[last..].trim().to_string());
+    if stages.len() > 1 {
         let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
-        let left_is_builtin = shell_like_builtins.contains(&left_tokens[0].as_str());
-        let right_is_builtin = shell_like_builtins.contains(&right_tokens[0].as_str());
-        let (read_end, write_end) = pipe().expect("pipe failed");
-        if left_is_builtin && right_is_builtin {
-            let orig_stdout = dup2(1, 1000).unwrap();
-            let orig_stdin = dup2(0, 1001).unwrap();
-            dup2(write_end, 1).unwrap();
-            close(read_end).ok();
-            run_builtin(left_tokens.clone());
-            std::io::stdout().flush().ok();
-            dup2(orig_stdout, 1).unwrap();
-            close(write_end).ok();
-            dup2(read_end, 0).unwrap();
-            run_builtin(right_tokens.clone());
-            std::io::stdout().flush().ok();
-            dup2(orig_stdin, 0).unwrap();
-            close(orig_stdout).ok();
-            close(orig_stdin).ok();
-            close(read_end).ok();
-            return;
-        } else if left_is_builtin {
-            match unsafe { fork() } {
-                Ok(ForkResult::Child) => {
-                    close(write_end).ok();
-                    dup2(read_end, 0).unwrap();
-                    close(read_end).ok();
-                    let cmd = CString::new(right_tokens[0].clone()).unwrap();
-                    let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                    execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
+        let mut pipes = vec![];
+        for _ in 0..stages.len() - 1 {
+            pipes.push(pipe().expect("pipe failed"));
+        }
+        let mut children = vec![];
+        for i in 0..stages.len() {
+            let tokens = shell_split_shell_like(&stages[i]);
+            if tokens.is_empty() { continue; }
+            let is_builtin = shell_like_builtins.contains(&tokens[0].as_str());
+            let (stdin_fd, stdout_fd) = match stages.len() {
+                1 => (0, 1),
+                _ => {
+                    let stdin_fd = if i == 0 {
+                        0
+                    } else {
+                        pipes[i - 1].0
+                    };
+                    let stdout_fd = if i == stages.len() - 1 {
+                        1
+                    } else {
+                        pipes[i].1
+                    };
+                    (stdin_fd, stdout_fd)
                 }
-                Ok(ForkResult::Parent { child: right_pid }) => {
-                    close(read_end).ok();
-                    let orig_stdout = dup2(1, 1000).unwrap();
-                    dup2(write_end, 1).unwrap();
-                    close(write_end).ok();
-                    run_builtin(left_tokens.clone());
-                    std::io::stdout().flush().ok();
-                    dup2(orig_stdout, 1).unwrap();
-                    close(orig_stdout).ok();
-                    let _ = waitpid(right_pid, None);
-                    return;
+            };
+            if is_builtin {
+                // Save original fds
+                let orig_stdin = if stdin_fd != 0 { Some(dup2(0, 1000 + i as i32).unwrap()) } else { None };
+                let orig_stdout = if stdout_fd != 1 { Some(dup2(1, 2000 + i as i32).unwrap()) } else { None };
+                if stdin_fd != 0 { dup2(stdin_fd, 0).unwrap(); }
+                if stdout_fd != 1 { dup2(stdout_fd, 1).unwrap(); }
+                // Close unused pipe ends
+                for (j, (r, w)) in pipes.iter().enumerate() {
+                    if j != i - 1 { close(*r).ok(); }
+                    if j != i { close(*w).ok(); }
                 }
-                Err(_) => { eprintln!("fork failed"); return; }
-            }
-        } else if right_is_builtin {
-            match unsafe { fork() } {
-                Ok(ForkResult::Child) => {
-                    close(read_end).ok();
-                    dup2(write_end, 1).unwrap();
-                    close(write_end).ok();
-                    let cmd = CString::new(left_tokens[0].clone()).unwrap();
-                    let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                    execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
-                }
-                Ok(ForkResult::Parent { child: left_pid }) => {
-                    close(write_end).ok();
-                    let orig_stdin = dup2(0, 1001).unwrap();
-                    dup2(read_end, 0).unwrap();
-                    close(read_end).ok();
-                    run_builtin(right_tokens.clone());
-                    std::io::stdout().flush().ok();
+                run_builtin(tokens.clone());
+                std::io::stdout().flush().ok();
+                // If this is the last stage and stdin was a pipe, drain it
+                if i == stages.len() - 1 && stdin_fd != 0 {
                     let mut buf = [0u8; 4096];
                     let mut stdin = std::fs::File::open("/dev/stdin").unwrap();
                     while let Ok(n) = stdin.read(&mut buf) {
                         if n == 0 { break; }
                     }
-                    dup2(orig_stdin, 0).unwrap();
-                    close(orig_stdin).ok();
-                    let _ = waitpid(left_pid, None);
-                    return;
                 }
-                Err(_) => { eprintln!("fork failed"); return; }
-            }
-        } else {
-            match unsafe { fork() } {
-                Ok(ForkResult::Child) => {
-                    close(read_end).ok();
-                    dup2(write_end, 1).expect("dup2 failed");
-                    close(write_end).ok();
-                    let cmd = CString::new(left_tokens[0].clone()).unwrap();
-                    let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                    execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
-                }
-                Ok(ForkResult::Parent { child: left_pid }) => {
-                    match unsafe { fork() } {
-                        Ok(ForkResult::Child) => {
-                            close(write_end).ok();
-                            dup2(read_end, 0).expect("dup2 failed");
-                            close(read_end).ok();
-                            let cmd = CString::new(right_tokens[0].clone()).unwrap();
-                            let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
-                            execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
-                        }
-                        Ok(ForkResult::Parent { child: right_pid }) => {
-                            close(read_end).ok();
-                            close(write_end).ok();
-                            let _ = waitpid(left_pid, None);
-                            let _ = waitpid(right_pid, None);
-                            return;
-                        }
-                        Err(_) => { eprintln!("fork failed"); return; }
+                if let Some(fd) = orig_stdin { dup2(fd, 0).unwrap(); close(fd).ok(); }
+                if let Some(fd) = orig_stdout { dup2(fd, 1).unwrap(); close(fd).ok(); }
+                // After running a builtin, close its pipe ends
+                if stdin_fd != 0 { close(stdin_fd).ok(); }
+                if stdout_fd != 1 { close(stdout_fd).ok(); }
+            } else {
+                match unsafe { fork() } {
+                    Ok(ForkResult::Child) => {
+                        if stdin_fd != 0 { dup2(stdin_fd, 0).unwrap(); }
+                        if stdout_fd != 1 { dup2(stdout_fd, 1).unwrap(); }
+                        // Close all pipe fds in child
+                        for (r, w) in &pipes { close(*r).ok(); close(*w).ok(); }
+                        let cmd = CString::new(tokens[0].clone()).unwrap();
+                        let args: Vec<CString> = tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                        execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                     }
+                    Ok(ForkResult::Parent { child }) => {
+                        children.push(child);
+                    }
+                    Err(_) => { eprintln!("fork failed"); return; }
                 }
-                Err(_) => { eprintln!("fork failed"); return; }
             }
         }
+        // Close all pipe fds in parent
+        for (r, w) in pipes { close(r).ok(); close(w).ok(); }
+        // Wait for all children
+        for child in children { let _ = waitpid(child, None); }
+        return;
     }
     let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
     let tokens_shell = shell_split_shell_like(input.trim());
