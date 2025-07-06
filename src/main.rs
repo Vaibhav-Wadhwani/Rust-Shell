@@ -220,11 +220,21 @@ fn command_handler(input: String) {
     // For cat, use literal parser for arguments (preserve quotes)
     let args: Vec<String> = if command == "cat" {
         let lit_tokens = shell_split_literal(input.trim());
-        if lit_tokens.len() > 1 {
-            lit_tokens[1..].iter().map(|s| s.to_string()).collect()
-        } else {
-            vec![]
+        // Remove redirection tokens and their following filename
+        let mut filtered = Vec::new();
+        let mut skip = false;
+        for i in 1..lit_tokens.len() {
+            if skip {
+                skip = false;
+                continue;
+            }
+            if lit_tokens[i] == ">" || lit_tokens[i] == "1>" {
+                skip = true;
+                continue;
+            }
+            filtered.push(lit_tokens[i].to_string());
         }
+        filtered
     } else {
         cmd_tokens[1..].iter().map(|s| s.to_string()).collect()
     };
