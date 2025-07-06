@@ -209,6 +209,8 @@ impl Shell {
         if !cur.is_empty() {
             tokens.push(cur);
         }
+        // Debug output: print the parsed tokens for every input
+        eprintln!("[DEBUG] Parsed tokens: {:?}", tokens);
         // Redirection parsing (unchanged)
         let mut args = Vec::new();
         let mut i = 0;
