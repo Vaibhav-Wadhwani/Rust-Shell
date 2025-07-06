@@ -1,26 +1,48 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::process::exit;
 
-fn main() {
+fn main() -> ! {
     loop {
         print!("$ ");
         io::stdout().flush().unwrap();
 
-        // Wait for user input
+        let stdin = io::stdin();
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        stdin.read_line(&mut input).unwrap();
 
-        match input
-            .trim()
-            .split_whitespace()
-            .collect::<Vec<&str>>()
-            .as_slice()
-        {
-            ["exit"] => break,
-            ["exit", code] => std::process::exit(code.parse().unwrap()),
-            ["echo", args @ ..] => println!("{}", args.join(" ")),
-            [other] => println!("{}: command not found", other),
-            _ => println!("Unknown command"),
+        let input = input.trim();
+
+        let command: Vec<&str> = input.split(" ").collect();
+
+        match command.as_slice() {
+            [""] => continue,
+            ["echo", args @ ..] => cmd_echo(args),
+            ["type", args @ ..] => cmd_type(args),
+            ["exit", "0"] => exit(0),
+            _ => println!("{}: command not found", input),
         }
+    }
+}
+
+fn cmd_echo(args: &[&str]) {
+    println!("{}", args.join(" "));
+}
+
+fn cmd_type(args: &[&str]) {
+    let args_len = args.len();
+
+    if args_len == 0 {
+        return;
+    }
+
+    if args_len > 1 {
+        println!("type: too many arguments");
+        return;
+    }
+
+    match args[0] {
+        "type" | "echo" | "exit" => println!("{} is a shell builtin", args[0]),
+        _ => println!("{}: not found", args[0]),
     }
 }
