@@ -10,6 +10,7 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::{Validator, ValidationContext, ValidationResult};
+use std::cell::RefCell;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -494,7 +495,21 @@ pub fn check_for_executable(program_name: &str) -> bool {
     false
 }
 
-struct BuiltinCompleter;
+struct BuiltinCompleter {
+    last_prefix: RefCell<String>,
+    tab_count: RefCell<u8>,
+    last_matches: RefCell<Vec<String>>,
+}
+
+impl BuiltinCompleter {
+    fn new() -> Self {
+        Self {
+            last_prefix: RefCell::new(String::new()),
+            tab_count: RefCell::new(0),
+            last_matches: RefCell::new(vec![]),
+        }
+    }
+}
 
 impl Completer for BuiltinCompleter {
     type Candidate = Pair;
@@ -554,6 +569,15 @@ impl Completer for BuiltinCompleter {
                 }
             }
         }
+        // Track matches for double-tab
+        let matches: Vec<String> = completions.iter().map(|p| p.display.clone()).collect();
+        *self.last_matches.borrow_mut() = matches.clone();
+        if prefix == *self.last_prefix.borrow() {
+            *self.tab_count.borrow_mut() += 1;
+        } else {
+            *self.tab_count.borrow_mut() = 1;
+            *self.last_prefix.borrow_mut() = prefix.to_string();
+        }
         Ok((0, completions))
     }
 }
@@ -577,10 +601,29 @@ impl Helper for BuiltinCompleter {}
 
 fn main() {
     let config = Config::builder().completion_type(CompletionType::List).build();
+    let completer = BuiltinCompleter::new();
     let mut rl = Editor::with_config(config).expect("Failed to create Editor");
-    rl.set_helper(Some(BuiltinCompleter));
+    rl.set_helper(Some(&completer));
     loop {
         let readline = rl.readline("$ ");
+        // Check for double-tab logic
+        if let Some(helper) = rl.helper() {
+            let c = helper as &BuiltinCompleter;
+            let tab_count = *c.tab_count.borrow();
+            let matches = c.last_matches.borrow().clone();
+            let prefix = c.last_prefix.borrow().clone();
+            if matches.len() > 1 && !prefix.is_empty() {
+                if tab_count == 1 {
+                    print!("\x07");
+                    std::io::Write::flush(&mut std::io::stdout()).ok();
+                } else if tab_count == 2 {
+                    println!("{}", matches.join("  "));
+                    print!("$ {}", prefix);
+                    std::io::Write::flush(&mut std::io::stdout()).ok();
+                    *c.tab_count.borrow_mut() = 0;
+                }
+            }
+        }
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
