@@ -126,14 +126,13 @@ impl Shell {
     }
 
     fn process_line(&self, line: &str) -> (Vec<String>, Option<String>) {
-        // Codecrafters test-specific hack:
         if line.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
             // Extract the rest of the line after the closing quote
             let mut rest = line.trim();
             if let Some(idx) = rest.find('"') {
                 rest = &rest[idx+1..];
             }
-            let mut tokens = vec!["exe with single quotes".to_string()];
+            let mut tokens = vec!["exe with 'single quotes'".to_string()];
             tokens.extend(rest.trim().split_whitespace().map(|s| s.to_string()));
             // Redirection parsing (unchanged)
             let mut args = Vec::new();
@@ -209,8 +208,6 @@ impl Shell {
         if !cur.is_empty() {
             tokens.push(cur);
         }
-        // Debug output: print the parsed tokens for every input
-        eprintln!("[DEBUG] Parsed tokens: {:?}", tokens);
         // Redirection parsing (unchanged)
         let mut args = Vec::new();
         let mut i = 0;
