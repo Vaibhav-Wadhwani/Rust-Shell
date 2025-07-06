@@ -33,6 +33,10 @@ fn cmd_echo(args: &[&str]) {
 }
 
 fn cmd_type(args: &[&str]) {
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+
     let args_len = args.len();
 
     if args_len == 0 {
@@ -45,14 +49,12 @@ fn cmd_type(args: &[&str]) {
     }
 
     let cmd = args[0];
-    let mut found_builtin = false;
-    let mut found_executable = None;
 
     // Check for builtins
     match cmd {
         "type" | "echo" | "exit" => {
             println!("{} is a shell builtin", cmd);
-            found_builtin = true;
+            return;
         },
         _ => {}
     }
@@ -63,21 +65,19 @@ fn cmd_type(args: &[&str]) {
             let mut candidate = PathBuf::from(&dir);
             candidate.push(cmd);
             if candidate.exists() {
-                // On Unix, check for execute permission; on Windows, just check existence
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
                     if let Ok(metadata) = fs::metadata(&candidate) {
                         let perm = metadata.permissions().mode();
                         if (perm & 0o111) != 0 {
-                            found_executable = Some(candidate);
-                            break;
+                            println!("{} is {}", cmd, candidate.display());
+                            return;
                         }
                     }
                 }
                 #[cfg(windows)]
                 {
-                    // On Windows, check for .exe, .bat, .cmd extensions as well
                     let exts = ["", ".exe", ".bat", ".cmd"];
                     for ext in &exts {
                         let mut candidate_with_ext = candidate.clone();
@@ -85,21 +85,14 @@ fn cmd_type(args: &[&str]) {
                             candidate_with_ext.set_extension(ext.trim_start_matches('.'));
                         }
                         if candidate_with_ext.exists() {
-                            found_executable = Some(candidate_with_ext);
-                            break;
+                            println!("{} is {}", cmd, candidate_with_ext.display());
+                            return;
                         }
-                    }
-                    if found_executable.is_some() {
-                        break;
                     }
                 }
             }
         }
     }
 
-    if let Some(path) = found_executable {
-        println!("{} is {}", cmd, path.display());
-    } else if !found_builtin {
-        println!("{}: not found", cmd);
-    }
+    println!("{}: not found", cmd);
 }
