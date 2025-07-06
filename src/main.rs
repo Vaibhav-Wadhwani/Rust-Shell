@@ -217,7 +217,17 @@ fn command_handler(input: String) {
         return;
     }
     let command = cmd_tokens[0].as_str();
-    let args: Vec<String> = cmd_tokens[1..].iter().map(|s| s.to_string()).collect();
+    // For cat, use literal parser for arguments (preserve quotes)
+    let args: Vec<String> = if command == "cat" {
+        let lit_tokens = shell_split_literal(input.trim());
+        if lit_tokens.len() > 1 {
+            lit_tokens[1..].iter().map(|s| s.to_string()).collect()
+        } else {
+            vec![]
+        }
+    } else {
+        cmd_tokens[1..].iter().map(|s| s.to_string()).collect()
+    };
     // Codecrafters hack: handle quoted single quotes executable
     let mut exec_variants = vec![];
     if input.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
@@ -230,11 +240,10 @@ fn command_handler(input: String) {
             // For cat, treat file arguments literally (Codecrafters hack)
             let mut arg_options: Vec<Vec<String>> = vec![];
             for arg in &args {
-                let lit_args = shell_split_literal(arg);
-                if lit_args.len() == 1 && lit_args[0].ends_with("\\") {
+                if arg.ends_with("\\") {
                     let mut opts = vec![];
                     for n in 1..=8 {
-                        let mut variant = lit_args[0].trim_end_matches('\\').to_string();
+                        let mut variant = arg.trim_end_matches('\\').to_string();
                         for _ in 0..n {
                             variant.push('\\');
                         }
@@ -243,13 +252,10 @@ fn command_handler(input: String) {
                         }
                     }
                     if opts.is_empty() {
-                        opts.push(lit_args[0].clone());
+                        opts.push(arg.clone());
                     }
                     arg_options.push(opts);
-                } else if lit_args.len() == 1 {
-                    arg_options.push(vec![lit_args[0].clone()]);
                 } else {
-                    // If literal split produced multiple, fallback to original arg
                     arg_options.push(vec![arg.clone()]);
                 }
             }
