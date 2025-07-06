@@ -365,9 +365,13 @@ fn command_handler(input: String) {
             for arg in &args {
                 if let Ok(mut file) = File::open(arg) {
                     io::copy(&mut file, &mut output).ok();
-                } else if redirect.is_some() || stderr_redirect.is_some() {
+                } else if stderr_redirect.is_some() {
                     writeln!(err_output, "cat: {}: No such file or directory", arg).ok();
+                } else if redirect.is_some() {
+                    // Print error to shell output only if redirected (legacy logic)
+                    println!("cat: {}: No such file or directory", arg);
                 }
+                // Suppress errors if no redirection
             }
             return;
         }
