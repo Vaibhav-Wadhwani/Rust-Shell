@@ -7,6 +7,9 @@ use itertools::Itertools;
 use rustyline::error::ReadlineError;
 use rustyline::{Editor, Helper, Context, CompletionType, Config};
 use rustyline::completion::{Completer, Pair};
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::{Validator, ValidationContext, ValidationResult};
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -514,11 +517,26 @@ impl Completer for BuiltinCompleter {
     }
 }
 
+impl Hinter for BuiltinCompleter {
+    type Hint = String;
+    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<String> {
+        None
+    }
+}
+
+impl Highlighter for BuiltinCompleter {}
+
+impl Validator for BuiltinCompleter {
+    fn validate(&self, _ctx: &mut ValidationContext) -> Result<ValidationResult, ReadlineError> {
+        Ok(ValidationResult::Valid(None))
+    }
+}
+
 impl Helper for BuiltinCompleter {}
 
 fn main() {
     let config = Config::builder().completion_type(CompletionType::List).build();
-    let mut rl = Editor::with_config(config);
+    let mut rl = Editor::with_config(config).expect("Failed to create Editor");
     rl.set_helper(Some(BuiltinCompleter));
     loop {
         let readline = rl.readline("$ ");
