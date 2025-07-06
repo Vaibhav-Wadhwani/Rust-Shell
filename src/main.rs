@@ -194,18 +194,13 @@ fn command_handler(input: String) {
         }
         return;
     }
-    // For external commands: parse first token with shell-like, rest with literal
-    let mut tokens_lit = shell_split_literal(input.trim());
-    if tokens_lit.is_empty() {
+    // For external commands: use shell-like for command, literal for args
+    let shell_tokens = shell_split_shell_like(input.trim());
+    if shell_tokens.is_empty() {
         return;
     }
-    // Use shell-like for the first token (command), literal for the rest (args)
-    let command_token = shell_split_shell_like(tokens_lit[0].as_str());
-    let command = if !command_token.is_empty() {
-        command_token[0].as_str()
-    } else {
-        tokens_lit[0].as_str()
-    };
+    let command = shell_tokens[0].as_str();
+    let tokens_lit = shell_split_literal(input.trim());
     // Redirection parsing for external commands
     let mut redirect = None;
     let mut cmd_tokens = tokens_lit.as_slice();
@@ -223,7 +218,11 @@ fn command_handler(input: String) {
     if cmd_tokens.is_empty() {
         return;
     }
-    let args: Vec<String> = cmd_tokens[1..].iter().map(|s| s.to_string()).collect();
+    let args: Vec<String> = if cmd_tokens.len() > 1 {
+        cmd_tokens[1..].iter().map(|s| s.to_string()).collect()
+    } else {
+        vec![]
+    };
     // Codecrafters hack: handle quoted single quotes executable
     let mut exec_variants = vec![];
     if input.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
