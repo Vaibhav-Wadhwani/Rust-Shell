@@ -152,6 +152,10 @@ fn command_handler(input: String) {
         }
         let command = filtered_tokens[0].as_str();
         let args: Vec<String> = filtered_tokens[1..].iter().map(|s| s.to_string()).collect();
+        if let Some(filename) = &stderr_redirect {
+            // Create the file even if we never write to it
+            let _ = File::create(filename);
+        }
         match command {
             "exit" => std::process::exit(
                 args.get(0)
