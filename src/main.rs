@@ -152,7 +152,7 @@ impl Shell {
                                     chars.next();
                                 }
                                 '\'' => {
-                                    // Special case for Codecrafters: treat \' as '
+                                    // Codecrafters: drop backslash before single quote in double quotes
                                     cur.push('\'');
                                     chars.next();
                                 }
