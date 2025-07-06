@@ -26,6 +26,7 @@ fn main() -> ! {
             &[] => continue,
             ["echo", args @ ..] => cmd_echo(args),
             ["type", args @ ..] => cmd_type(args),
+            ["pwd"] => cmd_pwd(),
             ["exit", "0"] => exit(0),
             [cmd, args @ ..] => {
                 // Try to run as external command
@@ -156,4 +157,11 @@ fn find_in_path(cmd: &str) -> Option<std::path::PathBuf> {
         }
     }
     None
+}
+
+fn cmd_pwd() {
+    match std::env::current_dir() {
+        Ok(path) => println!("{}", path.display()),
+        Err(_) => println!("pwd: failed to get current directory"),
+    }
 }
