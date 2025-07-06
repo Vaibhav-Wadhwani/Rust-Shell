@@ -11,6 +11,10 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::{Validator, ValidationContext, ValidationResult};
 use std::cell::RefCell;
+use nix::unistd::{fork, ForkResult, pipe, dup2, close, execvp, write as nix_write};
+use nix::sys::wait::waitpid;
+use nix::unistd::_exit;
+use std::ffi::CString;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -128,6 +132,67 @@ fn unescape_backslashes(s: &str) -> String {
 }
 
 fn command_handler(input: String) {
+    // Pipeline support: only handle a single |
+    if let Some(pipe_pos) = {
+        let mut in_single = false;
+        let mut in_double = false;
+        let mut idx = None;
+        for (i, c) in input.chars().enumerate() {
+            match c {
+                '\'' if !in_double => in_single = !in_single,
+                '"' if !in_single => in_double = !in_double,
+                '|' if !in_single && !in_double => { idx = Some(i); break; },
+                _ => {}
+            }
+        }
+        idx
+    } {
+        let left = input[..pipe_pos].trim();
+        let right = input[pipe_pos+1..].trim();
+        if left.is_empty() || right.is_empty() {
+            return;
+        }
+        let left_tokens = shell_split_shell_like(left);
+        let right_tokens = shell_split_shell_like(right);
+        if left_tokens.is_empty() || right_tokens.is_empty() {
+            return;
+        }
+        let (read_end, write_end) = pipe().expect("pipe failed");
+        // Left child (producer)
+        match unsafe { fork() } {
+            Ok(ForkResult::Child) => {
+                // Set stdout to write_end
+                close(read_end).ok();
+                dup2(write_end, 1).expect("dup2 failed");
+                close(write_end).ok();
+                let cmd = CString::new(left_tokens[0].clone()).unwrap();
+                let args: Vec<CString> = left_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                execvp(&cmd, &args).unwrap_or_else(|_| _exit(127));
+            }
+            Ok(ForkResult::Parent { child: left_pid }) => {
+                // Right child (consumer)
+                match unsafe { fork() } {
+                    Ok(ForkResult::Child) => {
+                        close(write_end).ok();
+                        dup2(read_end, 0).expect("dup2 failed");
+                        close(read_end).ok();
+                        let cmd = CString::new(right_tokens[0].clone()).unwrap();
+                        let args: Vec<CString> = right_tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                        execvp(&cmd, &args).unwrap_or_else(|_| _exit(127));
+                    }
+                    Ok(ForkResult::Parent { child: right_pid }) => {
+                        close(read_end).ok();
+                        close(write_end).ok();
+                        let _ = waitpid(left_pid, None);
+                        let _ = waitpid(right_pid, None);
+                        return;
+                    }
+                    Err(_) => { eprintln!("fork failed"); return; }
+                }
+            }
+            Err(_) => { eprintln!("fork failed"); return; }
+        }
+    }
     let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
     let tokens_shell = shell_split_shell_like(input.trim());
     if tokens_shell.is_empty() {
