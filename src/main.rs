@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{exit, Command};
+use std::os::unix::io::{AsRawFd, FromRawFd};
 
 type Builtin = fn(&mut Shell, &[String]) -> Result<(), String>;
 
@@ -233,12 +234,10 @@ impl Shell {
         command.args(args);
         if let Some(filename) = redir {
             use std::fs::File;
-            use std::os::unix::io::AsRawFd;
-            use std::os::unix::process::CommandExt;
             let file = File::create(filename).map_err(|e| e.to_string())?;
-            unsafe {
-                command.stdout(std::process::Stdio::from_raw_fd(file.as_raw_fd()));
-            }
+            let fd = file.as_raw_fd();
+            let stdio = unsafe { std::process::Stdio::from_raw_fd(fd) };
+            command.stdout(stdio);
         }
         let mut child = command.spawn().map_err(|e| e.to_string())?;
         child.wait().map_err(|e| e.to_string())?;
@@ -259,18 +258,19 @@ impl Shell {
             };
             let res = if let Some(builtin) = self.find_builtin(cmd) {
                 if let Some(filename) = &redir {
-                    // Redirect stdout for builtins
                     use std::fs::File;
-                    use std::os::unix::io::{AsRawFd, RawFd};
-                    use std::os::unix::prelude::FromRawFd;
-                    use std::io::Write;
-                    let file = File::create(filename).map_err(|e| e.to_string())?;
-                    let stdout_fd = 1; // STDOUT_FILENO
-                    let saved = unsafe { libc::dup(stdout_fd) };
-                    unsafe { libc::dup2(file.as_raw_fd(), stdout_fd) };
-                    let result = builtin(self, args);
-                    unsafe { libc::dup2(saved, stdout_fd); libc::close(saved); }
-                    result
+                    let file = File::create(filename);
+                    match file {
+                        Ok(file) => {
+                            let stdout_fd = 1; // STDOUT_FILENO
+                            let saved = unsafe { libc::dup(stdout_fd) };
+                            unsafe { libc::dup2(file.as_raw_fd(), stdout_fd) };
+                            let result = builtin(self, args);
+                            unsafe { libc::dup2(saved, stdout_fd); libc::close(saved); }
+                            result
+                        },
+                        Err(e) => Err(e.to_string()),
+                    }
                 } else {
                     builtin(self, args)
                 }
