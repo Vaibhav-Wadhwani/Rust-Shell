@@ -96,7 +96,8 @@ impl Shell {
 
     fn find_command(&self, cmd: &str) -> Option<PathBuf> {
         let path_var = std::env::var("PATH").ok()?;
-        let paths = path_var.split(":");
+        let mut paths: Vec<_> = path_var.split(if cfg!(windows) { ";" } else { ":" }).collect();
+        paths.reverse(); // Search rightmost (last) directory first, so last match wins
 
         for path in paths {
             let path = Path::new(path);
