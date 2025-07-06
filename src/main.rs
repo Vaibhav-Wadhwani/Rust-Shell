@@ -61,9 +61,18 @@ fn parse_command(input: &str) -> Vec<String> {
     while let Some(c) = chars.next() {
         match c {
             '\\' if !in_single_quote => {
-                current.push('\\');
-                if let Some(next) = chars.next() {
-                    current.push(next);
+                if let Some(&next) = chars.peek() {
+                    match next {
+                        ' ' | '\t' | '\n' | '\\' => {
+                            current.push(next);
+                            chars.next();
+                        }
+                        _ => {
+                            current.push('\\');
+                            current.push(next);
+                            chars.next();
+                        }
+                    }
                 }
             }
             '\'' if !in_double_quote => {
