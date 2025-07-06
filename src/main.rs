@@ -678,17 +678,6 @@ impl Validator for BuiltinCompleter {
 impl Helper for BuiltinCompleter {}
 
 fn main() {
-    // Ignore broken pipe panics for built-ins in pipelines
-    let default_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |info| {
-        if let Some(s) = info.payload().downcast_ref::<&str>() {
-            if s.contains("failed printing to stdout: Broken pipe") {
-                // Ignore the panic, do not exit
-                return;
-            }
-        }
-        default_hook(info);
-    }));
     let config = Config::builder().completion_type(CompletionType::List).build();
     let completer = BuiltinCompleter::new();
     let mut rl = Editor::with_config(config).expect("Failed to create Editor");
@@ -743,7 +732,8 @@ fn run_builtin(tokens: Vec<String>) {
         ),
         "echo" => {
             let output = args.join(" ");
-            println!("{}", output);
+            let _ = writeln!(std::io::stdout(), "{}", output);
+            let _ = std::io::stdout().flush();
         }
         "type" => {
             if args.is_empty() {
@@ -751,7 +741,7 @@ fn run_builtin(tokens: Vec<String>) {
             }
             match args[0].as_str() {
                 "echo" | "exit" | "type" | "pwd" | "cd" => {
-                    println!("{} is a shell builtin", args[0])
+                    let _ = writeln!(std::io::stdout(), "{} is a shell builtin", args[0]);
                 }
                 _ => {
                     let path = std::env::var("PATH").unwrap_or_default();
@@ -760,25 +750,25 @@ fn run_builtin(tokens: Vec<String>) {
                         let full_path = format!("{}/{}", path, args[0]);
                         if let Ok(metadata) = std::fs::metadata(&full_path) {
                             if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
-                                println!("{} is {}", args[0], full_path);
+                                let _ = writeln!(std::io::stdout(), "{} is {}", args[0], full_path);
                                 return;
                             }
                         }
                     }
-                    println!("{}: not found", args[0])
+                    let _ = writeln!(std::io::stdout(), "{}: not found", args[0]);
                 }
             }
         }
         "pwd" => {
             let current = env::current_dir();
             match current {
-                Ok(path) => println!("{}", path.display()),
-                Err(_e) => println!("{}: command not found", command),
+                Ok(path) => { let _ = writeln!(std::io::stdout(), "{}", path.display()); },
+                Err(_e) => { let _ = writeln!(std::io::stdout(), "{}: command not found", command); },
             }
         }
         "cd" => {
             if args.is_empty() {
-                println!("cd: missing argument");
+                let _ = writeln!(std::io::stdout(), "cd: missing argument");
                 return;
             }
             let mut target = args[0].to_string();
@@ -791,9 +781,9 @@ fn run_builtin(tokens: Vec<String>) {
                 Ok(_) => {}
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::NotFound {
-                        println!("cd: {}: No such file or directory", args[0]);
+                        let _ = writeln!(std::io::stdout(), "cd: {}: No such file or directory", args[0]);
                     } else {
-                        println!("cd: {}", e);
+                        let _ = writeln!(std::io::stdout(), "cd: {}", e);
                     }
                 }
             }
