@@ -61,6 +61,7 @@ fn parse_command(input: &str) -> Vec<String> {
     while let Some(c) = chars.next() {
         match c {
             '\\' if !in_single_quote => {
+                current.push('\\');
                 if let Some(next) = chars.next() {
                     current.push(next);
                 }
