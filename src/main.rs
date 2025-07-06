@@ -15,6 +15,7 @@ use nix::unistd::{fork, ForkResult, pipe, dup2, close, execvp};
 use nix::sys::wait::waitpid;
 use std::ffi::CString;
 use libc;
+use std::panic;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -677,6 +678,16 @@ impl Validator for BuiltinCompleter {
 impl Helper for BuiltinCompleter {}
 
 fn main() {
+    // Ignore broken pipe panics for built-ins in pipelines
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        if let Some(s) = info.payload().downcast_ref::<&str>() {
+            if s.contains("failed printing to stdout: Broken pipe") {
+                std::process::exit(0);
+            }
+        }
+        default_hook(info);
+    }));
     let config = Config::builder().completion_type(CompletionType::List).build();
     let completer = BuiltinCompleter::new();
     let mut rl = Editor::with_config(config).expect("Failed to create Editor");
