@@ -310,7 +310,13 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            filtered.push(arg.clone());
+            // Strip outer single quotes if present
+            let processed = if arg.starts_with("'") && arg.ends_with("'") && arg.len() >= 2 {
+                arg[1..arg.len()-1].to_string()
+            } else {
+                arg.clone()
+            };
+            filtered.push(processed);
         }
         filtered
     } else {
