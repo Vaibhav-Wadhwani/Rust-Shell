@@ -180,31 +180,60 @@ fn command_handler(input: String) {
                 }
             };
             if is_builtin {
-                // Save original fds
-                let orig_stdin: Option<RawFd> = if stdin_fd != 0 { dup2(0, 1000 + i as i32).ok() } else { None };
-                let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
-                if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
-                if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
-                // Close unused pipe ends (do not close the write end for this stage)
-                for (j, (r, w)) in pipes.iter().enumerate() {
-                    if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
-                    // Only close write ends for other stages, not this one
-                    if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
-                }
-                run_builtin(tokens.clone());
-                std::io::stdout().flush().ok();
-                // Explicitly close fd 1 and the actual pipe write fd if stdout was redirected
-                if stdout_fd != 1 {
-                    close(1).ok();
-                    if stdout_fd != 0 { close(stdout_fd).ok(); }
-                    // Now restore the original stdout
-                    if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                if i != stages.len() - 1 {
+                    // Not last stage: fork to run built-in in child
+                    match unsafe { fork() } {
+                        Ok(ForkResult::Child) => {
+                            let orig_stdin: Option<RawFd> = if stdin_fd != 0 { dup2(0, 1000 + i as i32).ok() } else { None };
+                            let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
+                            if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
+                            if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                            for (j, (r, w)) in pipes.iter().enumerate() {
+                                if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
+                                if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
+                            }
+                            run_builtin(tokens.clone());
+                            std::io::stdout().flush().ok();
+                            if stdout_fd != 1 {
+                                close(1).ok();
+                                if stdout_fd != 0 { close(stdout_fd).ok(); }
+                                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                            } else {
+                                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                            }
+                            if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                            if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
+                            if stdout_fd != 1 && stdout_fd != 0 { close(stdout_fd).ok(); }
+                            unsafe { libc::_exit(0) };
+                        }
+                        Ok(ForkResult::Parent { child }) => {
+                            children.push(child);
+                        }
+                        Err(_) => { eprintln!("fork failed"); return; }
+                    }
                 } else {
-                    if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                    // Last stage: run built-in in parent as before
+                    let orig_stdin: Option<RawFd> = if stdin_fd != 0 { dup2(0, 1000 + i as i32).ok() } else { None };
+                    let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
+                    if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
+                    if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                    for (j, (r, w)) in pipes.iter().enumerate() {
+                        if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
+                        if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
+                    }
+                    run_builtin(tokens.clone());
+                    std::io::stdout().flush().ok();
+                    if stdout_fd != 1 {
+                        close(1).ok();
+                        if stdout_fd != 0 { close(stdout_fd).ok(); }
+                        if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                    } else {
+                        if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                    }
+                    if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                    if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
+                    if stdout_fd != 1 && stdout_fd != 0 { close(stdout_fd).ok(); }
                 }
-                if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
-                if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
-                if stdout_fd != 1 && stdout_fd != 0 { close(stdout_fd).ok(); }
             } else {
                 match unsafe { fork() } {
                     Ok(ForkResult::Child) => {
