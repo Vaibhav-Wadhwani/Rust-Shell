@@ -310,9 +310,7 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Remove all single/double quotes and backslashes from the entire argument
-            let processed = arg.replace(['"', '\'', '\\'], "");
-            filtered.push(processed);
+            filtered.push(arg.clone());
         }
         filtered
     } else {
