@@ -197,18 +197,12 @@ fn command_handler(input: String) {
                 if stdout_fd != 1 {
                     close(1).ok();
                     if stdout_fd != 0 { close(stdout_fd).ok(); }
+                    // Now restore the original stdout
+                    if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                } else {
+                    if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
                 }
-                // If this is the last stage and stdin was a pipe, drain it
-                if i == stages.len() - 1 && stdin_fd != 0 {
-                    let mut buf = [0u8; 4096];
-                    let mut stdin = std::fs::File::open("/dev/stdin").unwrap();
-                    while let Ok(n) = stdin.read(&mut buf) {
-                        if n == 0 { break; }
-                    }
-                }
-                // Restore original fds before closing pipe/originals
                 if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
-                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
                 if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
                 if stdout_fd != 1 && stdout_fd != 0 { close(stdout_fd).ok(); }
             } else {
