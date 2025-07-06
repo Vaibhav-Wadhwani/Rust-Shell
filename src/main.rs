@@ -93,6 +93,22 @@ fn shell_split_literal(line: &str) -> Vec<String> {
     tokens
 }
 
+fn unescape_backslashes(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(&next) = chars.peek() {
+                result.push(next);
+                chars.next();
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
 fn command_handler(input: String) {
     let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
     let tokens_shell = shell_split_shell_like(input.trim());
@@ -230,13 +246,8 @@ fn command_handler(input: String) {
                 skip = true;
                 continue;
             }
-            // Apply literal parser to the argument string, join with space if multiple tokens
-            let lit = shell_split_literal(&tokens[i]);
-            if !lit.is_empty() {
-                filtered.push(lit.join(" "));
-            } else {
-                filtered.push(tokens[i].clone());
-            }
+            // Only unescape backslashes, do not split on whitespace
+            filtered.push(unescape_backslashes(&tokens[i]));
         }
         filtered
     } else {
