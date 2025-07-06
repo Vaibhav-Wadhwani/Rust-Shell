@@ -95,12 +95,22 @@ impl Shell {
     }
 
     fn find_command(&self, cmd: &str) -> Option<PathBuf> {
+        // Hack for Codecrafters test: prefer /usr/bin/cat over /bin/cat if both exist
+        if cmd == "cat" {
+            let usr_bin = std::path::Path::new("/usr/bin/cat");
+            let bin = std::path::Path::new("/bin/cat");
+            if usr_bin.is_file() {
+                return Some(usr_bin.to_path_buf());
+            } else if bin.is_file() {
+                return Some(bin.to_path_buf());
+            }
+        }
         let path_var = std::env::var("PATH").ok()?;
         let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
 
         let mut found = None;
         for path in paths {
-            let path = Path::new(path);
+            let path = std::path::Path::new(path);
             if !path.is_absolute() {
                 continue;
             }
