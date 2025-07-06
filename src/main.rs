@@ -57,19 +57,18 @@ fn parse_command(input: &str) -> Vec<String> {
     let mut current = String::new();
     let mut chars = input.chars().peekable();
     let mut in_single_quote = false;
+    let mut in_double_quote = false;
     while let Some(&c) = chars.peek() {
         match c {
-            '\'' => {
+            '\'' if !in_double_quote => {
                 chars.next(); // consume quote
-                if in_single_quote {
-                    // End of quoted section
-                    in_single_quote = false;
-                } else {
-                    // Start of quoted section
-                    in_single_quote = true;
-                }
+                in_single_quote = !in_single_quote;
             }
-            ' ' | '\t' if !in_single_quote => {
+            '"' if !in_single_quote => {
+                chars.next(); // consume quote
+                in_double_quote = !in_double_quote;
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
                 chars.next(); // consume space
                 if !current.is_empty() {
                     args.push(current.clone());
