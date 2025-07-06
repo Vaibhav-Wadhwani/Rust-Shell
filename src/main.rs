@@ -16,6 +16,7 @@ use nix::sys::wait::waitpid;
 use std::ffi::CString;
 use libc;
 use std::panic;
+use std::os::unix::io::RawFd;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -180,14 +181,14 @@ fn command_handler(input: String) {
             };
             if is_builtin {
                 // Save original fds
-                let orig_stdin = if stdin_fd != 0 { Some(dup2(0, 1000 + i as i32).ok()) } else { None };
-                let orig_stdout = if stdout_fd != 1 { Some(dup2(1, 2000 + i as i32).ok()) } else { None };
+                let orig_stdin: Option<RawFd> = if stdin_fd != 0 { dup2(0, 1000 + i as i32).ok() } else { None };
+                let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
                 if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
                 if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
                 // Close unused pipe ends
                 for (j, (r, w)) in pipes.iter().enumerate() {
-                    if j != i - 1 { close(*r).ok(); }
-                    if j != i { close(*w).ok(); }
+                    if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
+                    if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                 }
                 run_builtin(tokens.clone());
                 std::io::stdout().flush().ok();
@@ -200,10 +201,10 @@ fn command_handler(input: String) {
                     }
                 }
                 // Restore original fds before closing pipe/originals
-                if let Some(Some(fd)) = orig_stdin { dup2(fd, 0).ok(); close(fd).ok(); }
-                if let Some(Some(fd)) = orig_stdout { dup2(fd, 1).ok(); close(fd).ok(); }
-                if stdin_fd != 0 { close(stdin_fd).ok(); }
-                if stdout_fd != 1 { close(stdout_fd).ok(); }
+                if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
+                if stdout_fd != 1 && stdout_fd != 0 { close(stdout_fd).ok(); }
             } else {
                 match unsafe { fork() } {
                     Ok(ForkResult::Child) => {
