@@ -11,11 +11,13 @@ fn shell_split(line: &str) -> Vec<String> {
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
     let mut idx = 0;
+    let mut last_single_quote_backslash = false;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
                 '\'' => {
                     state = State::Single;
+                    last_single_quote_backslash = false;
                 },
                 '"' => state = State::Double,
                 '\\' => {
@@ -36,6 +38,11 @@ fn shell_split(line: &str) -> Vec<String> {
             State::Single => match ch {
                 '\'' => {
                     state = State::Normal;
+                    // Hack: If the last char before closing single quote was a backslash, preserve it
+                    if last_single_quote_backslash {
+                        cur.push('\\');
+                        last_single_quote_backslash = false;
+                    }
                     // Hack: If the next char is a backslash, append it to the token
                     if let Some(&next) = chars.peek() {
                         if next == '\\' {
@@ -45,7 +52,27 @@ fn shell_split(line: &str) -> Vec<String> {
                         }
                     }
                 },
-                _ => cur.push(ch),
+                '\\' => {
+                    // Don't push yet, check if next is closing quote
+                    if let Some(&next) = chars.peek() {
+                        if next == '\'' {
+                            last_single_quote_backslash = true;
+                        } else {
+                            cur.push('\\');
+                            last_single_quote_backslash = false;
+                        }
+                    } else {
+                        cur.push('\\');
+                        last_single_quote_backslash = false;
+                    }
+                },
+                _ => {
+                    if last_single_quote_backslash {
+                        cur.push('\\');
+                        last_single_quote_backslash = false;
+                    }
+                    cur.push(ch);
+                },
             },
             State::Double => match ch {
                 '"' => state = State::Normal,
