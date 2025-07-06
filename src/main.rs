@@ -256,7 +256,6 @@ impl Shell {
             let [cmd, args @ ..] = &parts[..] else {
                 continue;
             };
-            eprintln!("[DEBUG] cmd: {:?}, args: {:?}, redir: {:?}", cmd, args, redir);
             let res = if let Some(builtin) = self.find_builtin(cmd) {
                 if let Some(filename) = &redir {
                     use std::fs::File;
