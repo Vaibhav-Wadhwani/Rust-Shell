@@ -185,9 +185,10 @@ fn command_handler(input: String) {
                 let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
                 if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
                 if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
-                // Close unused pipe ends
+                // Close unused pipe ends (do not close the write end for this stage)
                 for (j, (r, w)) in pipes.iter().enumerate() {
                     if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
+                    // Only close write ends for other stages, not this one
                     if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                 }
                 run_builtin(tokens.clone());
