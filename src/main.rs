@@ -515,22 +515,13 @@ impl Completer for BuiltinCompleter {
     type Candidate = Pair;
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let prefix = &line[..pos];
-        let mut completions = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut names = Vec::new();
         // Builtins
         if "echo".starts_with(prefix) {
-            completions.push(Pair {
-                display: "echo".to_string(),
-                replacement: "echo ".to_string(),
-            });
-            seen.insert("echo".to_string());
+            names.push("echo".to_string());
         }
         if "exit".starts_with(prefix) {
-            completions.push(Pair {
-                display: "exit".to_string(),
-                replacement: "exit ".to_string(),
-            });
-            seen.insert("exit".to_string());
+            names.push("exit".to_string());
         }
         // External executables in PATH
         if let Ok(path_var) = std::env::var("PATH") {
@@ -546,7 +537,7 @@ impl Completer for BuiltinCompleter {
                                     Some(s) => s,
                                     None => continue,
                                 };
-                                if file_name_str.starts_with(prefix) && !seen.contains(file_name_str) {
+                                if file_name_str.starts_with(prefix) {
                                     // Check if executable
                                     let meta = entry.metadata();
                                     if let Ok(m) = meta {
@@ -555,11 +546,7 @@ impl Completer for BuiltinCompleter {
                                         #[cfg(not(unix))]
                                         let is_exec = true; // On Windows, assume all files in PATH are executable
                                         if is_exec {
-                                            completions.push(Pair {
-                                                display: file_name_str.to_string(),
-                                                replacement: format!("{} ", file_name_str),
-                                            });
-                                            seen.insert(file_name_str.to_string());
+                                            names.push(file_name_str.to_string());
                                         }
                                     }
                                 }
@@ -569,9 +556,14 @@ impl Completer for BuiltinCompleter {
                 }
             }
         }
-        // Track matches for double-tab
-        let matches: Vec<String> = completions.iter().map(|p| p.display.clone()).collect();
-        *self.last_matches.borrow_mut() = matches.clone();
+        // Deduplicate and sort
+        names.sort();
+        names.dedup();
+        let completions: Vec<Pair> = names.iter().map(|n| Pair {
+            display: n.clone(),
+            replacement: format!("{} ", n),
+        }).collect();
+        *self.last_matches.borrow_mut() = names.clone();
         if prefix == *self.last_prefix.borrow() {
             *self.tab_count.borrow_mut() += 1;
         } else {
