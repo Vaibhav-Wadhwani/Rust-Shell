@@ -193,8 +193,11 @@ fn command_handler(input: String) {
                 }
                 run_builtin(tokens.clone());
                 std::io::stdout().flush().ok();
-                // Explicitly close fd 1 if it was redirected to a pipe
-                if stdout_fd != 1 { close(1).ok(); }
+                // Explicitly close fd 1 and the actual pipe write fd if stdout was redirected
+                if stdout_fd != 1 {
+                    close(1).ok();
+                    if stdout_fd != 0 { close(stdout_fd).ok(); }
+                }
                 // If this is the last stage and stdin was a pipe, drain it
                 if i == stages.len() - 1 && stdin_fd != 0 {
                     let mut buf = [0u8; 4096];
