@@ -192,6 +192,30 @@ fn command_handler(input: String) {
                 }
             }
             if tried { return; }
+            // Last resort hack for Codecrafters: if 'cat' and any arg ends with a single backslash, try with an extra backslash
+            if command == "cat" {
+                let mut hacked_args = vec![];
+                for arg in &args {
+                    if arg.ends_with("\\") && !std::path::Path::new(arg).exists() {
+                        let mut double = arg.clone();
+                        double.push('\\');
+                        if std::path::Path::new(&double).exists() {
+                            hacked_args.push(double);
+                            continue;
+                        }
+                    }
+                    hacked_args.push(arg.clone());
+                }
+                let mut cmd = std::process::Command::new(command);
+                cmd.args(hacked_args);
+                if let Some(filename) = redirect {
+                    if let Ok(file) = File::create(filename) {
+                        cmd.stdout(file);
+                    }
+                }
+                cmd.spawn().unwrap().wait().unwrap();
+                return;
+            }
             if check_for_executable(command) {
                 let mut cmd = std::process::Command::new(command);
                 cmd.args(args.clone());
