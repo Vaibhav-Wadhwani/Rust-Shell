@@ -501,17 +501,58 @@ impl Completer for BuiltinCompleter {
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>), ReadlineError> {
         let prefix = &line[..pos];
         let mut completions = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        // Builtins
         if "echo".starts_with(prefix) {
             completions.push(Pair {
                 display: "echo".to_string(),
                 replacement: "echo ".to_string(),
             });
+            seen.insert("echo".to_string());
         }
         if "exit".starts_with(prefix) {
             completions.push(Pair {
                 display: "exit".to_string(),
                 replacement: "exit ".to_string(),
             });
+            seen.insert("exit".to_string());
+        }
+        // External executables in PATH
+        if let Ok(path_var) = std::env::var("PATH") {
+            for dir in path_var.split(':') {
+                let path = std::path::Path::new(dir);
+                if let Ok(entries) = std::fs::read_dir(path) {
+                    for entry in entries.flatten() {
+                        let file_type = entry.file_type();
+                        if let Ok(ft) = file_type {
+                            if ft.is_file() || ft.is_symlink() {
+                                let file_name = entry.file_name();
+                                let file_name_str = match file_name.to_str() {
+                                    Some(s) => s,
+                                    None => continue,
+                                };
+                                if file_name_str.starts_with(prefix) && !seen.contains(file_name_str) {
+                                    // Check if executable
+                                    let meta = entry.metadata();
+                                    if let Ok(m) = meta {
+                                        #[cfg(unix)]
+                                        let is_exec = m.permissions().mode() & 0o111 != 0;
+                                        #[cfg(not(unix))]
+                                        let is_exec = true; // On Windows, assume all files in PATH are executable
+                                        if is_exec {
+                                            completions.push(Pair {
+                                                display: file_name_str.to_string(),
+                                                replacement: format!("{} ", file_name_str),
+                                            });
+                                            seen.insert(file_name_str.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         Ok((0, completions))
     }
