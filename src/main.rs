@@ -199,9 +199,9 @@ fn command_handler(input: String) {
                         if n == 0 { break; }
                     }
                 }
-                if let Some(fd) = orig_stdin { dup2(fd, 0).unwrap(); close(fd).ok(); }
-                if let Some(fd) = orig_stdout { dup2(fd, 1).unwrap(); close(fd).ok(); }
-                // After running a builtin, close its pipe ends
+                // Restore original fds before closing pipe/originals
+                if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); close(fd).ok(); }
+                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); close(fd).ok(); }
                 if stdin_fd != 0 { close(stdin_fd).ok(); }
                 if stdout_fd != 1 { close(stdout_fd).ok(); }
             } else {
