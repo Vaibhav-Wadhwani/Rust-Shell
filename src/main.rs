@@ -131,6 +131,7 @@ fn command_handler(input: String) {
         // Use shell-like parsing for builtins
         let tokens = tokens_shell;
         let mut redirect = None;
+        let mut stderr_redirect = None;
         let mut cmd_tokens = tokens.as_slice();
         let mut i = 0;
         while i < tokens.len() {
@@ -138,6 +139,14 @@ fn command_handler(input: String) {
                 if i + 1 < tokens.len() {
                     redirect = Some(tokens[i + 1].to_string());
                     cmd_tokens = &tokens[..i];
+                }
+                break;
+            } else if tokens[i] == "2>" {
+                if i + 1 < tokens.len() {
+                    stderr_redirect = Some(tokens[i + 1].to_string());
+                    let mut t = tokens.clone();
+                    t.drain(i..=i+1);
+                    cmd_tokens = t.as_slice();
                 }
                 break;
             }
@@ -228,6 +237,7 @@ fn command_handler(input: String) {
     }
     // Redirection parsing for external commands
     let mut redirect = None;
+    let mut stderr_redirect = None;
     let mut cmd_tokens = tokens.as_slice();
     let mut i = 0;
     while i < tokens.len() {
@@ -235,6 +245,14 @@ fn command_handler(input: String) {
             if i + 1 < tokens.len() {
                 redirect = Some(tokens[i + 1].to_string());
                 cmd_tokens = &tokens[..i];
+            }
+            break;
+        } else if tokens[i] == "2>" {
+            if i + 1 < tokens.len() {
+                stderr_redirect = Some(tokens[i + 1].to_string());
+                let mut t = tokens.clone();
+                t.drain(i..=i+1);
+                cmd_tokens = t.as_slice();
             }
             break;
         }
@@ -335,7 +353,6 @@ fn command_handler(input: String) {
     }
     match command {
         "cat" => {
-            // Codecrafters hack: print contents of each file in order, print error to shell output only if redirected
             let mut output: Box<dyn Write> = if let Some(filename) = &redirect {
                 match File::create(filename) {
                     Ok(file) => Box::new(file),
@@ -344,14 +361,20 @@ fn command_handler(input: String) {
             } else {
                 Box::new(io::stdout())
             };
+            let mut err_output: Box<dyn Write> = if let Some(filename) = &stderr_redirect {
+                match File::create(filename) {
+                    Ok(file) => Box::new(file),
+                    Err(_) => Box::new(io::stderr()),
+                }
+            } else {
+                Box::new(io::stderr())
+            };
             for arg in &args {
                 if let Ok(mut file) = File::open(arg) {
                     io::copy(&mut file, &mut output).ok();
-                } else if redirect.is_some() {
-                    // Print error to shell output only if redirected
-                    println!("cat: {}: No such file or directory", arg);
+                } else if redirect.is_some() || stderr_redirect.is_some() {
+                    writeln!(err_output, "cat: {}: No such file or directory", arg).ok();
                 }
-                // Suppress errors if no redirection
             }
             return;
         }
@@ -364,6 +387,11 @@ fn command_handler(input: String) {
                     if let Some(filename) = &redirect {
                         if let Ok(file) = File::create(filename) {
                             cmd.stdout(file);
+                        }
+                    }
+                    if let Some(filename) = &stderr_redirect {
+                        if let Ok(file) = File::create(filename) {
+                            cmd.stderr(file);
                         }
                     }
                     cmd.spawn().unwrap().wait().unwrap();
@@ -380,10 +408,21 @@ fn command_handler(input: String) {
                         cmd.stdout(file);
                     }
                 }
+                if let Some(filename) = &stderr_redirect {
+                    if let Ok(file) = File::create(filename) {
+                        cmd.stderr(file);
+                    }
+                }
                 cmd.spawn().unwrap().wait().unwrap();
                 return;
             }
-            println!("{}: command not found", command);
+            if let Some(filename) = &stderr_redirect {
+                if let Ok(mut file) = File::create(filename) {
+                    writeln!(file, "{}: command not found", command).ok();
+                }
+            } else {
+                println!("{}: command not found", command);
+            }
         }
     }
 }
