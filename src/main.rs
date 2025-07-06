@@ -208,8 +208,8 @@ fn command_handler(input: String) {
             } else {
                 match unsafe { fork() } {
                     Ok(ForkResult::Child) => {
-                        if stdin_fd != 0 { dup2(stdin_fd, 0).unwrap(); }
-                        if stdout_fd != 1 { dup2(stdout_fd, 1).unwrap(); }
+                        if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
+                        if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
                         // Close all pipe fds in child
                         for (r, w) in &pipes { close(*r).ok(); close(*w).ok(); }
                         let cmd = CString::new(tokens[0].clone()).unwrap();
