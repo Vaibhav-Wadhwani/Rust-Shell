@@ -235,9 +235,7 @@ impl Shell {
         if let Some(filename) = redir {
             use std::fs::File;
             let file = File::create(filename).map_err(|e| e.to_string())?;
-            let fd = file.as_raw_fd();
-            let stdio = unsafe { std::process::Stdio::from_raw_fd(fd) };
-            command.stdout(stdio);
+            command.stdout(std::process::Stdio::from(file));
         }
         let mut child = command.spawn().map_err(|e| e.to_string())?;
         child.wait().map_err(|e| e.to_string())?;
