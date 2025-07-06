@@ -317,7 +317,7 @@ fn command_handler(input: String) {
                 skip = false;
                 continue;
             }
-            if arg == ">" || arg == "1>" {
+            if arg == ">" || arg == "1>" || arg == "2>" {
                 skip = true;
                 continue;
             }
