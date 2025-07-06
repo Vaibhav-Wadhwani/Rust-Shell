@@ -3,81 +3,136 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::process::{exit, Command};
 
-fn parse_shell_line(line: &str) -> (Vec<String>, Option<String>) {
-    let mut tokens = Vec::new();
-    let mut cur = String::new();
-    let mut chars = line.chars().peekable();
-    let mut redir: Option<String> = None;
-    enum State { Normal, Single, Double }
-    let mut state = State::Normal;
-    while let Some(ch) = chars.next() {
-        match state {
-            State::Normal => match ch {
-                '\'' => state = State::Single,
-                '"' => state = State::Double,
-                '\\' => {
-                    if let Some(&next) = chars.peek() {
-                        cur.push(next);
-                        chars.next();
-                    }
-                }
-                c if c.is_whitespace() => {
-                    if !cur.is_empty() {
-                        tokens.push(cur.clone());
-                        cur.clear();
-                    }
-                }
-                _ => cur.push(ch),
-            },
-            State::Single => match ch {
-                '\'' => state = State::Normal,
-                _ => cur.push(ch),
-            },
-            State::Double => match ch {
-                '"' => state = State::Normal,
-                '\\' => {
-                    if let Some(&next) = chars.peek() {
-                        match next {
-                            '\\' | '"' | '$' => {
-                                cur.push(next);
-                                chars.next();
-                            }
-                            '\'' => {
-                                // Codecrafters: drop both backslash and single quote in double quotes
-                                chars.next();
-                            }
-                            _ => {
-                                cur.push('\\');
-                                cur.push(next);
-                                chars.next();
-                            }
-                        }
-                    } else {
-                        cur.push('\\');
-                    }
-                }
-                _ => cur.push(ch),
-            },
-        }
+fn command_handler(input: String) {
+    // Tokenize input for robust redirection parsing
+    let tokens: Vec<&str> = input.trim().split_whitespace().collect();
+    if tokens.is_empty() {
+        return;
     }
-    if !cur.is_empty() {
-        tokens.push(cur);
-    }
-    // Redirection parsing
-    let mut args = Vec::new();
+    let mut redirect = None;
+    let mut cmd_tokens = tokens.as_slice();
     let mut i = 0;
     while i < tokens.len() {
-        if (tokens[i] == ">" || tokens[i] == "1>") && i + 1 < tokens.len() {
-            redir = Some(tokens[i + 1].clone());
-            i += 2;
-        } else {
-            args.push(tokens[i].clone());
-            i += 1;
+        if tokens[i] == ">" || tokens[i] == "1>" {
+            if i + 1 < tokens.len() {
+                redirect = Some(tokens[i + 1].to_string());
+                cmd_tokens = &tokens[..i];
+            }
+            break;
+        }
+        i += 1;
+    }
+    // If no command tokens before redirection, do nothing
+    if cmd_tokens.is_empty() {
+        return;
+    }
+    let command = cmd_tokens[0];
+    let args = &cmd_tokens[1..];
+    // match the cmd and execute the corresponding fn
+    match command {
+        "exit" => std::process::exit(
+            args.get(0)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(255),
+        ),
+        "echo" => {
+            let output = args
+                .iter()
+                .map(|s| s.trim_matches(&['\'', '"'][..]))
+                .collect::<Vec<_>>()
+                .join(" ");
+            if let Some(filename) = redirect {
+                if let Ok(mut file) = File::create(filename) {
+                    writeln!(file, "{}", output).ok();
+                }
+            } else {
+                println!("{}", output);
+            }
+        }
+        "type" => {
+            if args.is_empty() {
+                return;
+            }
+            match args[0] {
+                "echo" | "exit" | "type" | "pwd" | "cd" => {
+                    println!("{} is a shell builtin", args[0])
+                }
+                _ => {
+                    let path = std::env::var("PATH").unwrap_or_default();
+                    let paths = path.split(':');
+                    for path in paths {
+                        let full_path = format!("{}/{}", path, args[0]);
+                        if let Ok(metadata) = std::fs::metadata(&full_path) {
+                            if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                                println!("{} is {}", args[0], full_path);
+                                return;
+                            }
+                        }
+                    }
+                    println!("{}: not found", args[0])
+                }
+            }
+        }
+        "pwd" => {
+            let current = env::current_dir();
+            match current {
+                Ok(path) => println!("{}", path.display()),
+                Err(_e) => println!("{input}: command not found"),
+            }
+        }
+        "cd" => {
+            if args.is_empty() {
+                println!("cd: missing argument");
+                return;
+            }
+            let mut target = args[0].to_string();
+            if target == "~" {
+                if let Ok(home) = env::var("HOME") {
+                    target = home;
+                }
+            }
+            match env::set_current_dir(target.as_str()) {
+                Ok(_) => {}
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        println!("cd: {}: No such file or directory", args[0]);
+                    } else {
+                        println!("cd: {}", e);
+                    }
+                }
+            }
+        }
+        _ => {
+            if check_for_executable(command) {
+                let mut cmd = std::process::Command::new(command);
+                cmd.args(args);
+                if let Some(filename) = redirect {
+                    if let Ok(file) = File::create(filename) {
+                        cmd.stdout(file);
+                    }
+                }
+                cmd.spawn().unwrap().wait().unwrap();
+                return;
+            }
+            println!("{}: command not found", command);
         }
     }
-    (args, redir)
+}
+
+pub fn check_for_executable(program_name: &str) -> bool {
+    let path_var = env::var("PATH").unwrap_or_default();
+    let paths = path_var.split(":");
+    for path in paths {
+        let candidate = PathBuf::from(path).join(program_name);
+        if candidate.exists()
+            && candidate.is_file()
+            && candidate.metadata().unwrap().permissions().mode() & 0o111 != 0
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn main() {
@@ -85,131 +140,7 @@ fn main() {
         print!("$ ");
         io::stdout().flush().unwrap();
         let mut input = String::new();
-        if io::stdin().read_line(&mut input).is_err() {
-            break;
-        }
-        let input = input.trim_end();
-        if input.is_empty() {
-            continue;
-        }
-        let (args, redirect) = parse_shell_line(input);
-        if args.is_empty() {
-            continue;
-        }
-        let command = &args[0];
-        let cmd_args: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
-        // Codecrafters hack: handle quoted single quotes executable
-        let mut exec_variants = vec![];
-        if input.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
-            exec_variants.push("exe with single quotes".to_string());
-            exec_variants.push("exe with 'single quotes'".to_string());
-            exec_variants.push("exe with \\'single quotes\\'".to_string());
-        }
-        match command.as_str() {
-            "exit" => exit(cmd_args.get(0).and_then(|s| s.parse::<i32>().ok()).unwrap_or(255)),
-            "echo" => {
-                let output = cmd_args.join(" ");
-                if let Some(filename) = redirect {
-                    if let Ok(mut file) = File::create(filename) {
-                        writeln!(file, "{}", output).ok();
-                    }
-                } else {
-                    println!("{}", output);
-                }
-            }
-            "type" => {
-                if cmd_args.is_empty() { continue; }
-                match cmd_args[0] {
-                    "echo" | "exit" | "type" | "pwd" | "cd" => {
-                        println!("{} is a shell builtin", cmd_args[0]);
-                    }
-                    _ => {
-                        if let Some(path) = find_command(cmd_args[0]) {
-                            println!("{} is {}", cmd_args[0], path.display());
-                        } else {
-                            println!("{}: not found", cmd_args[0]);
-                        }
-                    }
-                }
-            }
-            "pwd" => {
-                if let Ok(cwd) = env::current_dir() {
-                    println!("{}", cwd.display());
-                }
-            }
-            "cd" => {
-                let target = cmd_args.get(0).map(|s| *s).unwrap_or("");
-                let new_cwd = if target == "~" {
-                    env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/"))
-                } else if PathBuf::from(target).is_absolute() {
-                    PathBuf::from(target)
-                } else {
-                    env::current_dir().unwrap_or_else(|_| PathBuf::from("/"))
-                        .join(target)
-                };
-                if new_cwd.is_file() {
-                    eprintln!("cd: not a directory: {}", target);
-                    continue;
-                }
-                if !new_cwd.is_dir() {
-                    eprintln!("cd: {}: No such file or directory", target);
-                    continue;
-                }
-                if let Err(e) = env::set_current_dir(&new_cwd) {
-                    eprintln!("cd: {}", e);
-                }
-            }
-            _ => {
-                // Try Codecrafters hack variants if present
-                let mut tried = false;
-                for variant in &exec_variants {
-                    if let Some(path) = find_command(variant) {
-                        run_external(&path, &cmd_args, redirect.as_deref());
-                        tried = true;
-                        break;
-                    }
-                }
-                if tried { continue; }
-                // Try as normal external command
-                if let Some(path) = find_command(command) {
-                    run_external(&path, &cmd_args, redirect.as_deref());
-                } else {
-                    eprintln!("{}: command not found", command);
-                }
-            }
-        }
+        io::stdin().read_line(&mut input).unwrap();
+        command_handler(input.clone());
     }
-}
-
-fn find_command(cmd: &str) -> Option<PathBuf> {
-    let path_var = env::var("PATH").unwrap_or_default();
-    let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
-    for path in paths {
-        if path.is_empty() { continue; }
-        let pb = PathBuf::from(path).join(cmd);
-        if pb.is_file() {
-            #[cfg(unix)]
-            {
-                if pb.metadata().ok()?.permissions().mode() & 0o111 != 0 {
-                    return Some(pb);
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                return Some(pb);
-            }
-        }
-    }
-    None
-}
-
-fn run_external(path: &PathBuf, args: &[&str], redirect: Option<&str>) {
-    let mut cmd = Command::new(path);
-    cmd.args(args);
-    if let Some(filename) = redirect {
-        if let Ok(file) = File::create(filename) {
-            cmd.stdout(file);
-        }
-    }
-    let _ = cmd.status();
 }
