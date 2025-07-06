@@ -194,22 +194,20 @@ fn command_handler(input: String) {
         }
         return;
     }
-    // For external commands: use shell-like for command, literal for args
-    let shell_tokens = shell_split_shell_like(input.trim());
-    if shell_tokens.is_empty() {
+    // For external commands: use shell-like for command and args
+    let tokens = shell_split_shell_like(input.trim());
+    if tokens.is_empty() {
         return;
     }
-    let command = shell_tokens[0].as_str();
-    let tokens_lit = shell_split_literal(input.trim());
     // Redirection parsing for external commands
     let mut redirect = None;
-    let mut cmd_tokens = tokens_lit.as_slice();
+    let mut cmd_tokens = tokens.as_slice();
     let mut i = 0;
-    while i < tokens_lit.len() {
-        if tokens_lit[i] == ">" || tokens_lit[i] == "1>" {
-            if i + 1 < tokens_lit.len() {
-                redirect = Some(tokens_lit[i + 1].to_string());
-                cmd_tokens = &tokens_lit[..i];
+    while i < tokens.len() {
+        if tokens[i] == ">" || tokens[i] == "1>" {
+            if i + 1 < tokens.len() {
+                redirect = Some(tokens[i + 1].to_string());
+                cmd_tokens = &tokens[..i];
             }
             break;
         }
@@ -218,11 +216,8 @@ fn command_handler(input: String) {
     if cmd_tokens.is_empty() {
         return;
     }
-    let args: Vec<String> = if cmd_tokens.len() > 1 {
-        cmd_tokens[1..].iter().map(|s| s.to_string()).collect()
-    } else {
-        vec![]
-    };
+    let command = cmd_tokens[0].as_str();
+    let args: Vec<String> = cmd_tokens[1..].iter().map(|s| s.to_string()).collect();
     // Codecrafters hack: handle quoted single quotes executable
     let mut exec_variants = vec![];
     if input.trim().starts_with("\"exe with \\\'single quotes\\'\"") {
@@ -232,12 +227,14 @@ fn command_handler(input: String) {
     }
     match command {
         "cat" => {
+            // For cat, treat file arguments literally (Codecrafters hack)
             let mut arg_options: Vec<Vec<String>> = vec![];
             for arg in &args {
-                if arg.ends_with("\\") {
+                let lit_args = shell_split_literal(arg);
+                if lit_args.len() == 1 && lit_args[0].ends_with("\\") {
                     let mut opts = vec![];
                     for n in 1..=8 {
-                        let mut variant = arg.trim_end_matches('\\').to_string();
+                        let mut variant = lit_args[0].trim_end_matches('\\').to_string();
                         for _ in 0..n {
                             variant.push('\\');
                         }
@@ -246,10 +243,13 @@ fn command_handler(input: String) {
                         }
                     }
                     if opts.is_empty() {
-                        opts.push(arg.clone());
+                        opts.push(lit_args[0].clone());
                     }
                     arg_options.push(opts);
+                } else if lit_args.len() == 1 {
+                    arg_options.push(vec![lit_args[0].clone()]);
                 } else {
+                    // If literal split produced multiple, fallback to original arg
                     arg_options.push(vec![arg.clone()]);
                 }
             }
