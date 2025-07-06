@@ -16,7 +16,7 @@ use nix::sys::wait::waitpid;
 use std::ffi::CString;
 use libc;
 use std::panic;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{RawFd, FromRawFd};
 use nix::unistd::pipe as nix_pipe;
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
