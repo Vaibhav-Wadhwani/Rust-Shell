@@ -133,16 +133,19 @@ fn command_handler(input: String) {
         let mut redirect = None;
         let mut redirect_append = None;
         let mut stderr_redirect = None;
+        let mut stderr_append = None;
         let mut filtered_tokens = Vec::new();
         let mut i = 0;
         while i < tokens.len() {
-            if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>" || tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.len() {
+            if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>" || tokens[i] == ">>" || tokens[i] == "1>>" || tokens[i] == "2>>") && i + 1 < tokens.len() {
                 if tokens[i] == ">" || tokens[i] == "1>" {
                     redirect = Some(tokens[i + 1].to_string());
                 } else if tokens[i] == ">>" || tokens[i] == "1>>" {
                     redirect_append = Some(tokens[i + 1].to_string());
                 } else if tokens[i] == "2>" {
                     stderr_redirect = Some(tokens[i + 1].to_string());
+                } else if tokens[i] == "2>>" {
+                    stderr_append = Some(tokens[i + 1].to_string());
                 }
                 i += 2;
                 continue;
@@ -177,6 +180,11 @@ fn command_handler(input: String) {
                     }
                 } else {
                     println!("{}", output);
+                }
+                if let Some(filename) = &stderr_redirect {
+                    let _ = File::create(filename);
+                } else if let Some(filename) = &stderr_append {
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(filename);
                 }
             }
             "type" => {
@@ -245,16 +253,19 @@ fn command_handler(input: String) {
     let mut redirect = None;
     let mut redirect_append = None;
     let mut stderr_redirect = None;
+    let mut stderr_append = None;
     let mut filtered_tokens = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
-        if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>" || tokens[i] == ">>" || tokens[i] == "1>>") && i + 1 < tokens.len() {
+        if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>" || tokens[i] == ">>" || tokens[i] == "1>>" || tokens[i] == "2>>") && i + 1 < tokens.len() {
             if tokens[i] == ">" || tokens[i] == "1>" {
                 redirect = Some(tokens[i + 1].to_string());
             } else if tokens[i] == ">>" || tokens[i] == "1>>" {
                 redirect_append = Some(tokens[i + 1].to_string());
             } else if tokens[i] == "2>" {
                 stderr_redirect = Some(tokens[i + 1].to_string());
+            } else if tokens[i] == "2>>" {
+                stderr_append = Some(tokens[i + 1].to_string());
             }
             i += 2;
             continue;
@@ -374,19 +385,22 @@ fn command_handler(input: String) {
                     Ok(file) => Box::new(file),
                     Err(_) => Box::new(io::stderr()),
                 }
+            } else if let Some(filename) = &stderr_append {
+                match std::fs::OpenOptions::new().create(true).append(true).open(filename) {
+                    Ok(file) => Box::new(file),
+                    Err(_) => Box::new(io::stderr()),
+                }
             } else {
                 Box::new(io::stderr())
             };
             for arg in &args {
                 if let Ok(mut file) = File::open(arg) {
                     io::copy(&mut file, &mut output).ok();
-                } else if stderr_redirect.is_some() {
+                } else if stderr_redirect.is_some() || stderr_append.is_some() {
                     writeln!(err_output, "cat: {}: No such file or directory", arg).ok();
-                } else if redirect.is_some() {
-                    // Print error to shell output only if redirected (legacy logic)
+                } else if redirect.is_some() || redirect_append.is_some() {
                     println!("cat: {}: No such file or directory", arg);
                 }
-                // Suppress errors if no redirection
             }
             return;
         }
@@ -407,6 +421,10 @@ fn command_handler(input: String) {
                     }
                     if let Some(filename) = &stderr_redirect {
                         if let Ok(file) = File::create(filename) {
+                            cmd.stderr(file);
+                        }
+                    } else if let Some(filename) = &stderr_append {
+                        if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
                             cmd.stderr(file);
                         }
                     }
@@ -432,12 +450,20 @@ fn command_handler(input: String) {
                     if let Ok(file) = File::create(filename) {
                         cmd.stderr(file);
                     }
+                } else if let Some(filename) = &stderr_append {
+                    if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
+                        cmd.stderr(file);
+                    }
                 }
                 cmd.spawn().unwrap().wait().unwrap();
                 return;
             }
             if let Some(filename) = &stderr_redirect {
                 if let Ok(mut file) = File::create(filename) {
+                    writeln!(file, "{}: command not found", command).ok();
+                }
+            } else if let Some(filename) = &stderr_append {
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
                     writeln!(file, "{}: command not found", command).ok();
                 }
             } else {
