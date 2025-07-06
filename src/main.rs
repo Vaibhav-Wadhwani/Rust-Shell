@@ -132,31 +132,26 @@ fn command_handler(input: String) {
         let tokens = tokens_shell;
         let mut redirect = None;
         let mut stderr_redirect = None;
-        let mut cmd_tokens = tokens.as_slice();
+        let mut filtered_tokens = Vec::new();
         let mut i = 0;
         while i < tokens.len() {
-            if tokens[i] == ">" || tokens[i] == "1>" {
-                if i + 1 < tokens.len() {
+            if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>") && i + 1 < tokens.len() {
+                if tokens[i] == ">" || tokens[i] == "1>" {
                     redirect = Some(tokens[i + 1].to_string());
-                    cmd_tokens = &tokens[..i];
-                }
-                break;
-            } else if tokens[i] == "2>" {
-                if i + 1 < tokens.len() {
+                } else if tokens[i] == "2>" {
                     stderr_redirect = Some(tokens[i + 1].to_string());
-                    let mut t = tokens.clone();
-                    t.drain(i..=i+1);
-                    cmd_tokens = t.as_slice();
                 }
-                break;
+                i += 2;
+                continue;
             }
+            filtered_tokens.push(tokens[i].clone());
             i += 1;
         }
-        if cmd_tokens.is_empty() {
+        if filtered_tokens.is_empty() {
             return;
         }
-        let command = cmd_tokens[0].as_str();
-        let args: Vec<String> = cmd_tokens[1..].iter().map(|s| s.to_string()).collect();
+        let command = filtered_tokens[0].as_str();
+        let args: Vec<String> = filtered_tokens[1..].iter().map(|s| s.to_string()).collect();
         match command {
             "exit" => std::process::exit(
                 args.get(0)
