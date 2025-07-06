@@ -19,7 +19,7 @@ fn main() -> ! {
         let command: Vec<&str> = input.split_whitespace().collect();
 
         match command.as_slice() {
-            [""] => continue,
+            &[] => continue,
             ["echo", args @ ..] => cmd_echo(args),
             ["type", args @ ..] => cmd_type(args),
             ["exit", "0"] => exit(0),
