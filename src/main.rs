@@ -238,31 +238,25 @@ fn command_handler(input: String) {
     // Redirection parsing for external commands
     let mut redirect = None;
     let mut stderr_redirect = None;
-    let mut cmd_tokens = tokens.as_slice();
+    let mut filtered_tokens = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
-        if tokens[i] == ">" || tokens[i] == "1>" {
-            if i + 1 < tokens.len() {
+        if (tokens[i] == ">" || tokens[i] == "1>" || tokens[i] == "2>") && i + 1 < tokens.len() {
+            if tokens[i] == ">" || tokens[i] == "1>" {
                 redirect = Some(tokens[i + 1].to_string());
-                cmd_tokens = &tokens[..i];
-            }
-            break;
-        } else if tokens[i] == "2>" {
-            if i + 1 < tokens.len() {
+            } else if tokens[i] == "2>" {
                 stderr_redirect = Some(tokens[i + 1].to_string());
-                let mut t = tokens.clone();
-                t.drain(i..=i+1);
-                cmd_tokens = t.as_slice();
             }
-            break;
+            i += 2;
+            continue;
         }
+        filtered_tokens.push(tokens[i].clone());
         i += 1;
     }
-    if cmd_tokens.is_empty() {
+    if filtered_tokens.is_empty() {
         return;
     }
-    let command = cmd_tokens[0].as_str();
-    // For cat, apply literal parser to each argument (except command), but do not split on whitespace
+    let command = filtered_tokens[0].as_str();
     let args: Vec<String> = if command == "cat" {
         // Codecrafters hack: group by single/double quotes, otherwise split on whitespace
         let mut args = Vec::new();
@@ -342,7 +336,7 @@ fn command_handler(input: String) {
         }
         filtered
     } else {
-        cmd_tokens[1..].iter().map(|s| s.to_string()).collect()
+        filtered_tokens[1..].iter().map(|s| s.to_string()).collect()
     };
     // Codecrafters hack: handle quoted single quotes executable
     let mut exec_variants = vec![];
