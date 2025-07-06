@@ -1,261 +1,229 @@
-#[allow(unused_imports)]
+use std::collections::HashMap;
 use std::io::{self, Write};
-use std::process::exit;
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::{exit, Command};
 
-fn main() -> ! {
-    loop {
-        print!("$ ");
-        io::stdout().flush().unwrap();
+type Builtin = fn(&mut Shell, &[String]) -> Result<(), String>;
 
-        let stdin = io::stdin();
-        let mut input = String::new();
-        stdin.read_line(&mut input).unwrap();
-
-        let input = input.trim();
-
-        let command = process_line(input);
-
-        match command.as_slice() {
-            [] => continue,
-            [cmd, args @ ..] if *cmd == "echo" => {
-                cmd_echo(args);
-            }
-            [cmd, args @ ..] if *cmd == "type" => {
-                cmd_type(args);
-            }
-            [cmd, args @ ..] if *cmd == "pwd" => {
-                cmd_pwd();
-            }
-            [cmd, args @ ..] if *cmd == "cd" && args.len() == 1 => {
-                cmd_cd(&args[0]);
-            }
-            [cmd, args @ ..] if *cmd == "exit" && args == ["0"] => {
-                exit(0);
-            }
-            [cmd, args @ ..] => {
-                if let Some(exec_path) = find_in_path(cmd) {
-                    let child = std::process::Command::new(exec_path)
-                        .arg0(cmd)
-                        .args(args)
-                        .spawn();
-                    match child {
-                        Ok(mut child) => {
-                            let _ = child.wait();
-                        },
-                        Err(_) => {
-                            println!("{}: command not found", input);
-                        }
-                    }
-                } else {
-                    println!("{}: command not found", input);
-                }
-            }
-        }
-    }
+struct Shell {
+    builtins: HashMap<&'static str, Builtin>,
+    cwd: PathBuf,
 }
 
-fn process_line(line: &str) -> Vec<String> {
-    let mut single = false;
-    let mut double = false;
-    let mut groups = Vec::new();
-    let mut cur = String::new();
+impl Shell {
+    fn try_new() -> Option<Shell> {
+        let builtins = HashMap::from([
+            ("type", Shell::builtin_type as Builtin),
+            ("exit", Shell::builtin_exit as Builtin),
+            ("echo", Shell::builtin_echo as Builtin),
+            ("pwd", Shell::builtin_pwd as Builtin),
+            ("cd", Shell::builtin_cd as Builtin),
+        ]);
 
-    let mut chars = line.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if single {
-            match ch {
-                '\'' => single = false,
-                _ => cur.push(ch),
-            };
-        } else if double {
-            match ch {
-                '"' => double = false,
-                '\\' => {
-                    if let Some(&ch_next) = chars.peek() {
-                        if ch_next == '\\' || ch_next == '"' || ch_next == '$' {
-                            chars.next();
-                            cur.push(ch_next);
-                        } else {
-                            cur.push('\\');
-                            cur.push(ch_next);
-                            chars.next();
-                        }
-                    }
-                }
-                _ => cur.push(ch),
-            };
+        let cwd = std::env::current_dir().ok()?;
+
+        Some(Shell { builtins, cwd })
+    }
+
+    fn builtin_echo(&mut self, args: &[String]) -> Result<(), String> {
+        println!("{}", args.join(" "));
+        Ok(())
+    }
+
+    fn builtin_exit(&mut self, args: &[String]) -> Result<(), String> {
+        let code = match args {
+            [] => 0,
+            [arg] => arg
+                .parse::<i32>()
+                .map_err(|_| format!("invalid return code {arg}"))?,
+            _ => return Err("invalid number of arguments".into()),
+        };
+
+        exit(code);
+    }
+
+    fn builtin_type(&mut self, args: &[String]) -> Result<(), String> {
+        let [arg] = args else {
+            return Err("invalid number of arguments".into());
+        };
+
+        if self.find_builtin(&arg).is_some() {
+            println!("{arg} is a shell builtin");
+            return Ok(());
+        }
+
+        if let Some(path) = self.find_command(&arg) {
+            println!("{arg} is {}", path.display());
+            return Ok(());
+        }
+
+        println!("{arg}: not found");
+        Ok(())
+    }
+
+    fn builtin_pwd(&mut self, _: &[String]) -> Result<(), String> {
+        println!("{}", self.cwd.display());
+        Ok(())
+    }
+
+    fn builtin_cd(&mut self, args: &[String]) -> Result<(), String> {
+        let [arg] = args else {
+            return Err("invalid number of arguments".into());
+        };
+
+        let new_cwd = if arg == "~" {
+            let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+            PathBuf::from(home)
+        } else if Path::new(arg).is_absolute() {
+            PathBuf::from(arg)
         } else {
-            match ch {
-                '\'' => single = true,
-                '"' => double = true,
-                '\\' => {
-                    if let Some(&ch_next) = chars.peek() {
-                        match ch_next {
-                            ' ' | '\t' | '\n' | '\\' | '\'' => {
+            self.cwd.join(arg)
+        };
+
+        if new_cwd.is_file() {
+            return Err(format!("not a directory: {arg}"));
+        }
+        if !new_cwd.is_dir() {
+            return Err(format!("{arg}: No such file or directory"));
+        }
+
+        std::env::set_current_dir(&new_cwd).map_err(|e| e.to_string())?;
+        self.cwd = new_cwd.canonicalize().unwrap_or(new_cwd);
+        Ok(())
+    }
+
+    fn find_builtin(&self, cmd: &str) -> Option<Builtin> {
+        self.builtins.get(cmd).map(|b| *b)
+    }
+
+    fn find_command(&self, cmd: &str) -> Option<PathBuf> {
+        let path_var = std::env::var("PATH").ok()?;
+        let paths = path_var.split(if cfg!(windows) { ";" } else { ":" });
+
+        for path in paths {
+            let path = Path::new(path);
+            if !path.is_absolute() {
+                continue;
+            }
+
+            let file_path = path.join(cmd);
+            if file_path.is_file() {
+                return Some(file_path);
+            }
+        }
+
+        None
+    }
+
+    fn process_line(&self, line: &str) -> Vec<String> {
+        let mut single = false;
+        let mut double = false;
+        let mut groups = Vec::new();
+        let mut cur = String::new();
+
+        let mut chars = line.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if single {
+                match ch {
+                    '\'' => single = false,
+                    _ => cur.push(ch),
+                };
+            } else if double {
+                match ch {
+                    '"' => double = false,
+                    '\\' => {
+                        if let Some(&ch_next) = chars.peek() {
+                            if ch_next == '\\' || ch_next == '"' || ch_next == '$' {
                                 chars.next();
                                 cur.push(ch_next);
-                            }
-                            _ => {
+                            } else {
                                 cur.push('\\');
                                 cur.push(ch_next);
                                 chars.next();
                             }
                         }
                     }
-                }
-                ch if ch.is_whitespace() => {
-                    if !cur.is_empty() {
-                        groups.push(cur);
-                        cur = String::new();
+                    _ => cur.push(ch),
+                };
+            } else {
+                match ch {
+                    '\'' => single = true,
+                    '"' => double = true,
+                    '\\' => {
+                        if let Some(&ch_next) = chars.peek() {
+                            match ch_next {
+                                ' ' | '\t' | '\n' | '\\' | '\'' => {
+                                    chars.next();
+                                    cur.push(ch_next);
+                                }
+                                _ => {
+                                    cur.push('\\');
+                                    cur.push(ch_next);
+                                    chars.next();
+                                }
+                            }
+                        }
                     }
-                }
-                _ => cur.push(ch),
+                    ch if ch.is_whitespace() => {
+                        if !cur.is_empty() {
+                            groups.push(cur);
+                            cur = String::new();
+                        }
+                    }
+                    _ => cur.push(ch),
+                };
+            }
+        }
+
+        if !cur.is_empty() {
+            groups.push(cur);
+        }
+
+        groups
+    }
+
+    fn exec_command(&self, cmd: &str, args: &[String]) -> Result<(), String> {
+        let mut child = Command::new(cmd)
+            .args(args)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+
+        child.wait().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn run(&mut self) {
+        let stdin = io::stdin();
+        let mut stdout = io::stdout();
+
+        loop {
+            print!("$ ");
+            stdout.flush().unwrap();
+
+            let mut input = String::new();
+            stdin.read_line(&mut input).unwrap();
+
+            let parts: Vec<_> = self.process_line(input.as_str());
+            let [cmd, args @ ..] = &parts[..] else {
+                continue;
             };
-        }
-    }
 
-    if !cur.is_empty() {
-        groups.push(cur);
-    }
+            let res = if let Some(builtin) = self.find_builtin(cmd) {
+                builtin(self, args)
+            } else if self.find_command(cmd).is_some() {
+                self.exec_command(cmd, args)
+            } else {
+                Err("command not found".into())
+            };
 
-    groups
-}
-
-fn cmd_echo(args: &[String]) {
-    println!("{}", args.join(" "));
-}
-
-fn cmd_type(args: &[String]) {
-    use std::env;
-    use std::fs;
-    use std::path::PathBuf;
-
-    let args_len = args.len();
-
-    if args_len == 0 {
-        return;
-    }
-
-    if args_len > 1 {
-        println!("type: too many arguments");
-        return;
-    }
-
-    let cmd = args[0].clone();
-
-    // Check for builtins
-    match cmd.as_str() {
-        "type" | "echo" | "exit" | "pwd" => {
-            println!("{} is a shell builtin", cmd);
-            return;
-        },
-        _ => {}
-    }
-
-    // Search PATH for executable
-    if let Ok(path_var) = env::var("PATH") {
-        for dir in env::split_paths(&path_var) {
-            let mut candidate = PathBuf::from(&dir);
-            candidate.push(&cmd);
-            if candidate.exists() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(metadata) = fs::metadata(&candidate) {
-                        let perm = metadata.permissions().mode();
-                        if (perm & 0o111) != 0 {
-                            println!("{} is {}", cmd, candidate.display());
-                            return;
-                        }
-                    }
-                }
-                #[cfg(windows)]
-                {
-                    let exts = ["", ".exe", ".bat", ".cmd"];
-                    for ext in &exts {
-                        let mut candidate_with_ext = candidate.clone();
-                        if !ext.is_empty() {
-                            candidate_with_ext.set_extension(ext.trim_start_matches('.'));
-                        }
-                        if candidate_with_ext.exists() {
-                            println!("{} is {}", cmd, candidate_with_ext.display());
-                            return;
-                        }
-                    }
-                }
+            if let Err(err) = res {
+                println!("{cmd}: {err}");
             }
         }
     }
-
-    println!("{}: not found", cmd);
 }
 
-fn find_in_path(cmd: &str) -> Option<std::path::PathBuf> {
-    use std::env;
-    use std::fs;
-    use std::path::PathBuf;
-
-    if let Ok(path_var) = env::var("PATH") {
-        for dir in env::split_paths(&path_var) {
-            let mut candidate = PathBuf::from(&dir);
-            candidate.push(cmd);
-            if candidate.exists() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(metadata) = fs::metadata(&candidate) {
-                        let perm = metadata.permissions().mode();
-                        if (perm & 0o111) != 0 {
-                            return Some(candidate);
-                        }
-                    }
-                }
-                #[cfg(windows)]
-                {
-                    let exts = ["", ".exe", ".bat", ".cmd"];
-                    for ext in &exts {
-                        let mut candidate_with_ext = candidate.clone();
-                        if !ext.is_empty() {
-                            candidate_with_ext.set_extension(ext.trim_start_matches('.'));
-                        }
-                        if candidate_with_ext.exists() {
-                            return Some(candidate_with_ext);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-fn cmd_pwd() {
-    match std::env::current_dir() {
-        Ok(path) => println!("{}", path.display()),
-        Err(_) => println!("pwd: failed to get current directory"),
-    }
-}
-
-fn cmd_cd(path: &str) {
-    let target = if path == "~" {
-        match std::env::var("HOME") {
-            Ok(home) => home,
-            Err(_) => {
-                println!("cd: HOME not set");
-                return;
-            }
-        }
-    } else {
-        path.to_string()
-    };
-    if let Err(_) = std::env::set_current_dir(&target) {
-        println!("cd: {}: No such file or directory", path);
-    }
+fn main() {
+    let mut shell = Shell::try_new().unwrap();
+    shell.run();
 }
