@@ -67,4 +67,13 @@ pub fn start_repl() {
             }
         }
     }
+    // After REPL loop, write history to HISTFILE if set
+    if let Ok(histfile) = std::env::var("HISTFILE") {
+        if let Ok(mut file) = std::fs::File::create(&histfile) {
+            let hist = history.lock().unwrap();
+            for entry in hist.iter() {
+                let _ = writeln!(file, "{}", entry);
+            }
+        }
+    }
 } 
