@@ -9,24 +9,15 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
     let mut chars = line.chars().peekable();
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
-    let mut last_quote = QuoteType::None;
     let mut token_quote = QuoteType::None;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
                 '\'' => {
                     state = State::Single;
-                    if cur.is_empty() {
-                        token_quote = QuoteType::Single;
-                    }
-                    last_quote = QuoteType::Single;
                 },
                 '"' => {
                     state = State::Double;
-                    if cur.is_empty() {
-                        token_quote = QuoteType::Double;
-                    }
-                    last_quote = QuoteType::Double;
                 },
                 '\\' => {
                     if let Some(&next) = chars.peek() {
@@ -38,7 +29,6 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                     if !cur.is_empty() {
                         tokens.push((cur.clone(), token_quote));
                         cur.clear();
-                        last_quote = QuoteType::None;
                         token_quote = QuoteType::None;
                     }
                 }
@@ -52,6 +42,7 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                 },
                 _ => {
                     cur.push(ch);
+                    token_quote = QuoteType::Single;
                 },
             },
             State::Double => match ch {
@@ -78,9 +69,11 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                     } else {
                         cur.push('\\');
                     }
+                    token_quote = QuoteType::Double;
                 }
                 _ => {
                     cur.push(ch);
+                    token_quote = QuoteType::Double;
                 },
             },
         }
