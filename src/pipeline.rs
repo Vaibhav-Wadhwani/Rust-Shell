@@ -15,6 +15,7 @@ use std::io::{BufRead, BufReader};
 use std::io::Write;
 use std::env;
 use std::os::unix::fs::PermissionsExt;
+use crate::parser::unescape_backslashes;
 
 pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
     let mut stages = vec![];
@@ -229,7 +230,11 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         close(stderr_r).ok();
                         close(stderr_w).ok();
                         let cmd = CString::new(tokens[0].clone()).unwrap();
-                        let args: Vec<CString> = tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                        use crate::parser::unescape_backslashes;
+                        let args: Vec<CString> = std::iter::once(tokens[0].clone())
+                            .chain(tokens.iter().skip(1).map(|s| unescape_backslashes(s)))
+                            .map(|s| CString::new(s).unwrap())
+                            .collect();
                         execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                     }
                     Ok(ForkResult::Parent { child }) => {
@@ -469,8 +474,11 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     close(stderr_w).ok();
                     let exec_cmd = exec_path.unwrap_or_else(|| tokens[0].trim().to_string());
                     let cmd = CString::new(exec_cmd.clone()).unwrap();
-                    let mut args: Vec<CString> = tokens.iter().map(|s| CString::new(s.trim()).unwrap()).collect();
-                    args[0] = CString::new(exec_cmd).unwrap();
+                    use crate::parser::unescape_backslashes;
+                    let args: Vec<CString> = std::iter::once(tokens[0].clone())
+                        .chain(tokens.iter().skip(1).map(|s| unescape_backslashes(s)))
+                        .map(|s| CString::new(s).unwrap())
+                        .collect();
                     execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                 }
                 Ok(ForkResult::Parent { child }) => {
