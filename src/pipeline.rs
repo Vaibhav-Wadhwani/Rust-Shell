@@ -327,14 +327,14 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
             if let Some(fd) = orig_stderr { dup2(fd, 2).ok(); if fd != 0 && fd != 1 && fd != 2 { close(fd).ok(); } }
         } else {
             // Check if command exists in PATH
-            let cmd = &tokens[0];
+            let cmd = tokens[0].trim();
             let mut found = false;
             let mut exec_path = None;
             if cmd.contains('/') {
                 if let Ok(metadata) = std::fs::metadata(cmd) {
                     if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
                         found = true;
-                        exec_path = Some(cmd.clone());
+                        exec_path = Some(cmd.to_string());
                     }
                 }
             } else if let Ok(path_var) = env::var("PATH") {
@@ -412,9 +412,9 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     }
                     close(stderr_r).ok();
                     close(stderr_w).ok();
-                    let exec_cmd = exec_path.unwrap_or_else(|| tokens[0].clone());
+                    let exec_cmd = exec_path.unwrap_or_else(|| tokens[0].trim().to_string());
                     let cmd = CString::new(exec_cmd.clone()).unwrap();
-                    let mut args: Vec<CString> = tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                    let mut args: Vec<CString> = tokens.iter().map(|s| CString::new(s.trim()).unwrap()).collect();
                     args[0] = CString::new(exec_cmd).unwrap();
                     execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                 }
