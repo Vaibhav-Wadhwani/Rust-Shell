@@ -85,6 +85,8 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
     if !cur.is_empty() {
         tokens.push((cur, last_quote));
     }
+    eprintln!("[DEBUG] shell_split_shell_like input: {}", line);
+    eprintln!("[DEBUG] shell_split_shell_like tokens: {:?}", tokens);
     tokens
 }
 
