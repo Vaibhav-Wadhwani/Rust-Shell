@@ -13,6 +13,18 @@ pub fn start_repl() {
     let mut rl = Editor::with_config(config).expect("Failed to create Editor");
     rl.set_helper(Some(&completer));
     let history = Arc::new(Mutex::new(Vec::new()));
+    // Load history from HISTFILE if set
+    if let Ok(histfile) = std::env::var("HISTFILE") {
+        if let Ok(file) = std::fs::File::open(&histfile) {
+            let reader = std::io::BufReader::new(file);
+            let mut hist = history.lock().unwrap();
+            for line in reader.lines().flatten() {
+                if !line.trim().is_empty() {
+                    hist.push(line);
+                }
+            }
+        }
+    }
     loop {
         let readline = rl.readline("$ ");
         if let Some(helper) = rl.helper() {
