@@ -18,6 +18,7 @@ use libc;
 use std::panic;
 use std::os::unix::io::{RawFd, FromRawFd};
 use nix::unistd::pipe as nix_pipe;
+use std::sync::{Arc, Mutex};
 
 fn shell_split_shell_like(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -733,6 +734,7 @@ fn main() {
     let completer = BuiltinCompleter::new();
     let mut rl = Editor::with_config(config).expect("Failed to create Editor");
     rl.set_helper(Some(&completer));
+    let history = Arc::new(Mutex::new(Vec::new()));
     loop {
         let readline = rl.readline("$ ");
         if let Some(helper) = rl.helper() {
@@ -757,6 +759,12 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
+                let trimmed = line.trim();
+                if trimmed.is_empty() { continue; }
+                {
+                    let mut hist = history.lock().unwrap();
+                    hist.push(trimmed.to_string());
+                }
                 command_handler(line);
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
@@ -840,7 +848,10 @@ fn run_builtin(tokens: Vec<String>) {
             }
         }
         "history" => {
-            // Will implement listing in next step
+            let hist = history.lock().unwrap();
+            for (i, cmd) in hist.iter().enumerate() {
+                println!("{:>5}  {}", i + 1, cmd);
+            }
         }
         _ => unreachable!(),
     }
