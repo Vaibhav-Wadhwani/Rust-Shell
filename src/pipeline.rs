@@ -255,6 +255,17 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                     return (*v).clone();
                                                 }
                                             }
+                                            // Aggressive fallback: scan parent dir for substring match
+                                            if let Some(parent) = std::path::Path::new(s).parent() {
+                                                if let Ok(entries) = std::fs::read_dir(parent) {
+                                                    for entry in entries.flatten() {
+                                                        let fname = entry.file_name().to_string_lossy();
+                                                        if fname.contains(s) || fname.contains(&quoted) {
+                                                            return entry.path().to_string_lossy().to_string();
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                         s.clone()
                                     },
@@ -526,6 +537,17 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                         for v in variants.iter() {
                                             if std::path::Path::new(v).exists() {
                                                 return (*v).clone();
+                                            }
+                                        }
+                                        // Aggressive fallback: scan parent dir for substring match
+                                        if let Some(parent) = std::path::Path::new(s).parent() {
+                                            if let Ok(entries) = std::fs::read_dir(parent) {
+                                                for entry in entries.flatten() {
+                                                    let fname = entry.file_name().to_string_lossy();
+                                                    if fname.contains(s) || fname.contains(&quoted) {
+                                                        return entry.path().to_string_lossy().to_string();
+                                                    }
+                                                }
                                             }
                                         }
                                     }
