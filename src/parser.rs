@@ -10,15 +10,22 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
     let mut last_quote = QuoteType::None;
+    let mut token_quote = QuoteType::None;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
                 '\'' => {
                     state = State::Single;
+                    if cur.is_empty() {
+                        token_quote = QuoteType::Single;
+                    }
                     last_quote = QuoteType::Single;
                 },
                 '"' => {
                     state = State::Double;
+                    if cur.is_empty() {
+                        token_quote = QuoteType::Double;
+                    }
                     last_quote = QuoteType::Double;
                 },
                 '\\' => {
@@ -29,9 +36,10 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                 }
                 c if c.is_whitespace() => {
                     if !cur.is_empty() {
-                        tokens.push((cur.clone(), last_quote));
+                        tokens.push((cur.clone(), token_quote));
                         cur.clear();
                         last_quote = QuoteType::None;
+                        token_quote = QuoteType::None;
                     }
                 }
                 _ => {
@@ -78,7 +86,7 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
         }
     }
     if !cur.is_empty() {
-        tokens.push((cur, last_quote));
+        tokens.push((cur, token_quote));
     }
     tokens
 }
