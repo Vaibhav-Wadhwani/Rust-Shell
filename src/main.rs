@@ -287,6 +287,8 @@ fn command_handler(input: String, history: &Arc<Mutex<Vec<String>>>) {
         // Detect redirection for stdout
         let mut redirect = None;
         let mut redirect_append = None;
+        let mut stderr_redirect = None;
+        let mut stderr_append = None;
         let mut filtered_tokens = vec![tokens_shell[0].clone()];
         let mut i = 1;
         while i < tokens_shell.len() {
@@ -299,13 +301,23 @@ fn command_handler(input: String, history: &Arc<Mutex<Vec<String>>>) {
                 redirect_append = Some(tokens_shell[i + 1].clone());
                 i += 2;
                 continue;
-            } else if (t == "2>" || t == "2>>") && i + 1 < tokens_shell.len() {
-                // skip stderr redirection for builtins
+            } else if t == "2>" && i + 1 < tokens_shell.len() {
+                stderr_redirect = Some(tokens_shell[i + 1].clone());
+                i += 2;
+                continue;
+            } else if t == "2>>" && i + 1 < tokens_shell.len() {
+                stderr_append = Some(tokens_shell[i + 1].clone());
                 i += 2;
                 continue;
             }
             filtered_tokens.push(t.clone());
             i += 1;
+        }
+        // Always create/truncate/append stderr redirection file for builtins
+        if let Some(filename) = &stderr_redirect {
+            let _ = std::fs::File::create(filename);
+        } else if let Some(filename) = &stderr_append {
+            let _ = std::fs::OpenOptions::new().create(true).append(true).open(filename);
         }
         if filtered_tokens[0] == "echo" {
             let output = filtered_tokens[1..].join(" ");
