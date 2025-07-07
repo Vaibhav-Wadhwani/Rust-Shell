@@ -258,13 +258,14 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                             // Directory listing fallback
                                             if let Some(parent) = std::path::Path::new(s).parent() {
                                                 if let Ok(entries) = std::fs::read_dir(parent) {
+                                                    let mut arg = s.to_string();
+                                                    // Remove trailing backslashes and/or single quotes
+                                                    while arg.ends_with("\\") || arg.ends_with("'") {
+                                                        arg.pop();
+                                                    }
+                                                    // Exact match after cleaning
                                                     for entry in entries.flatten() {
                                                         let fname = entry.file_name().to_string_lossy().to_string();
-                                                        let mut arg = s.to_string();
-                                                        // Remove trailing backslashes and/or single quotes
-                                                        while arg.ends_with("\\") || arg.ends_with("'") {
-                                                            arg.pop();
-                                                        }
                                                         let mut fname_cmp = fname.clone();
                                                         while fname_cmp.ends_with("\\") || fname_cmp.ends_with("'") {
                                                             fname_cmp.pop();
@@ -274,10 +275,12 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                         }
                                                     }
                                                     // Aggressive fallback: match prefix or substring
-                                                    for entry in std::fs::read_dir(parent).unwrap().flatten() {
-                                                        let fname = entry.file_name().to_string_lossy().to_string();
-                                                        if fname.starts_with(&arg) || fname.contains(&arg) {
-                                                            return entry.path().to_string_lossy().to_string();
+                                                    if let Ok(entries2) = std::fs::read_dir(parent) {
+                                                        for entry in entries2.flatten() {
+                                                            let fname = entry.file_name().to_string_lossy().to_string();
+                                                            if fname.starts_with(&arg) || fname.contains(&arg) {
+                                                                return entry.path().to_string_lossy().to_string();
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -558,13 +561,14 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                         // Directory listing fallback
                                         if let Some(parent) = std::path::Path::new(s).parent() {
                                             if let Ok(entries) = std::fs::read_dir(parent) {
+                                                let mut arg = s.to_string();
+                                                // Remove trailing backslashes and/or single quotes
+                                                while arg.ends_with("\\") || arg.ends_with("'") {
+                                                    arg.pop();
+                                                }
+                                                // Exact match after cleaning
                                                 for entry in entries.flatten() {
                                                     let fname = entry.file_name().to_string_lossy().to_string();
-                                                    let mut arg = s.to_string();
-                                                    // Remove trailing backslashes and/or single quotes
-                                                    while arg.ends_with("\\") || arg.ends_with("'") {
-                                                        arg.pop();
-                                                    }
                                                     let mut fname_cmp = fname.clone();
                                                     while fname_cmp.ends_with("\\") || fname_cmp.ends_with("'") {
                                                         fname_cmp.pop();
@@ -574,10 +578,12 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                     }
                                                 }
                                                 // Aggressive fallback: match prefix or substring
-                                                for entry in std::fs::read_dir(parent).unwrap().flatten() {
-                                                    let fname = entry.file_name().to_string_lossy().to_string();
-                                                    if fname.starts_with(&arg) || fname.contains(&arg) {
-                                                        return entry.path().to_string_lossy().to_string();
+                                                if let Ok(entries2) = std::fs::read_dir(parent) {
+                                                    for entry in entries2.flatten() {
+                                                        let fname = entry.file_name().to_string_lossy().to_string();
+                                                        if fname.starts_with(&arg) || fname.contains(&arg) {
+                                                            return entry.path().to_string_lossy().to_string();
+                                                        }
                                                     }
                                                 }
                                             }
