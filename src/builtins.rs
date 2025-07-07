@@ -108,6 +108,36 @@ pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
                 // Ensure trailing newline (already added by writeln!)
                 return;
             }
+            // Implement history -a <file>
+            if tokens.len() == 3 && tokens[1] == "-a" {
+                use std::collections::HashMap;
+                use std::sync::OnceLock;
+                static LAST_A_IDX: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
+                let last_a_idx = LAST_A_IDX.get_or_init(|| Mutex::new(HashMap::new()));
+                let path = tokens[2].clone();
+                let mut hist = history.lock().unwrap();
+                let this_cmd = tokens.join(" ");
+                // Only add if not already the last entry
+                let needs_push = hist.last().map(|e| e != &this_cmd).unwrap_or(true);
+                if needs_push {
+                    hist.push(this_cmd.clone());
+                }
+                let mut last_idx_map = last_a_idx.lock().unwrap();
+                let start = *last_idx_map.get(&path).unwrap_or(&0);
+                let mut file = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("history: cannot append: {}", e));
+                        return;
+                    }
+                };
+                for entry in hist.iter().skip(start) {
+                    let _ = writeln!(file, "{}", entry);
+                }
+                last_idx_map.insert(path, hist.len());
+                // Ensure trailing newline (already added by writeln!)
+                return;
+            }
             let hist = history.lock().unwrap();
             if tokens.len() == 2 {
                 if let Ok(n) = tokens[1].parse::<usize>() {
