@@ -273,6 +273,13 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                             return entry.path().to_string_lossy().to_string();
                                                         }
                                                     }
+                                                    // Aggressive fallback: match prefix or substring
+                                                    for entry in std::fs::read_dir(parent).unwrap().flatten() {
+                                                        let fname = entry.file_name().to_string_lossy().to_string();
+                                                        if fname.starts_with(&arg) || fname.contains(&arg) {
+                                                            return entry.path().to_string_lossy().to_string();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -563,6 +570,13 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                         fname_cmp.pop();
                                                     }
                                                     if fname_cmp == arg {
+                                                        return entry.path().to_string_lossy().to_string();
+                                                    }
+                                                }
+                                                // Aggressive fallback: match prefix or substring
+                                                for entry in std::fs::read_dir(parent).unwrap().flatten() {
+                                                    let fname = entry.file_name().to_string_lossy().to_string();
+                                                    if fname.starts_with(&arg) || fname.contains(&arg) {
                                                         return entry.path().to_string_lossy().to_string();
                                                     }
                                                 }
