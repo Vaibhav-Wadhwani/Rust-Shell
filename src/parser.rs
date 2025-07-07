@@ -10,11 +10,20 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
     let mut cur_quote = QuoteType::None;
+    let mut last_quote = QuoteType::None;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
-                '\'' => { state = State::Single; cur_quote = QuoteType::Single; },
-                '"' => { state = State::Double; cur_quote = QuoteType::Double; },
+                '\'' => {
+                    state = State::Single;
+                    cur_quote = QuoteType::Single;
+                    last_quote = QuoteType::Single;
+                },
+                '"' => {
+                    state = State::Double;
+                    cur_quote = QuoteType::Double;
+                    last_quote = QuoteType::Double;
+                },
                 '\\' => {
                     if let Some(&next) = chars.peek() {
                         cur.push(next);
@@ -23,19 +32,29 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                 }
                 c if c.is_whitespace() => {
                     if !cur.is_empty() {
-                        tokens.push((cur.clone(), cur_quote));
+                        tokens.push((cur.clone(), last_quote));
                         cur.clear();
                         cur_quote = QuoteType::None;
+                        last_quote = QuoteType::None;
                     }
                 }
-                _ => cur.push(ch),
+                _ => {
+                    cur.push(ch);
+                    last_quote = QuoteType::None;
+                },
             },
             State::Single => match ch {
-                '\'' => { state = State::Normal; },
-                _ => cur.push(ch),
+                '\'' => {
+                    state = State::Normal;
+                },
+                _ => {
+                    cur.push(ch);
+                },
             },
             State::Double => match ch {
-                '"' => { state = State::Normal; },
+                '"' => {
+                    state = State::Normal;
+                },
                 '\\' => {
                     if let Some(&next) = chars.peek() {
                         match next {
@@ -57,12 +76,14 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                         cur.push('\\');
                     }
                 }
-                _ => cur.push(ch),
+                _ => {
+                    cur.push(ch);
+                },
             },
         }
     }
     if !cur.is_empty() {
-        tokens.push((cur, cur_quote));
+        tokens.push((cur, last_quote));
     }
     tokens
 }
