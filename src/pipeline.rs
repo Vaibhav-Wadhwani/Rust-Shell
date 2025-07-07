@@ -138,6 +138,11 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                 }
             }
         }
+        // Close all pipe fds in parent
+        for (r, w) in &pipes {
+            close(*r).ok();
+            close(*w).ok();
+        }
         for (child, stderr_fd) in children.into_iter().zip(child_stderr_fds.into_iter()) {
             let _ = waitpid(child, None);
             let file = unsafe { File::from_raw_fd(stderr_fd) };
