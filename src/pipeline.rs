@@ -238,8 +238,8 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                 if *q == QuoteType::Single {
                                     if std::fs::metadata(s).is_ok() {
                                         s.clone()
-                                    } else if s.ends_with("\\'") {
-                                        let mut without_backslash = s[..s.len()-2].to_string();
+                                    } else if s.ends_with("\\") {
+                                        let mut without_backslash = s[..s.len()-1].to_string();
                                         without_backslash.push('\'');
                                         if std::fs::metadata(&without_backslash).is_ok() {
                                             without_backslash
@@ -515,8 +515,8 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                             if *q == QuoteType::Single {
                                 if std::fs::metadata(s).is_ok() {
                                     s.clone()
-                                } else if s.ends_with("\\'") {
-                                    let mut without_backslash = s[..s.len()-2].to_string();
+                                } else if s.ends_with("\\") {
+                                    let mut without_backslash = s[..s.len()-1].to_string();
                                     without_backslash.push('\'');
                                     if std::fs::metadata(&without_backslash).is_ok() {
                                         without_backslash
