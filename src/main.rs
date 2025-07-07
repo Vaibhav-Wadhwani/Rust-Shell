@@ -154,7 +154,7 @@ fn command_handler(input: String) {
     }
     stages.push(input[last..].trim().to_string());
     if stages.len() > 1 {
-        let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
+        let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
         let mut pipes = vec![];
         for _ in 0..stages.len() - 1 {
             pipes.push(pipe().expect("pipe failed"));
@@ -276,7 +276,7 @@ fn command_handler(input: String) {
         }
         return;
     }
-    let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
+    let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
     let tokens_shell = shell_split_shell_like(input.trim());
     if tokens_shell.is_empty() {
         return;
@@ -392,6 +392,9 @@ fn command_handler(input: String) {
                         }
                     }
                 }
+            }
+            "history" => {
+                // Will implement listing in next step
             }
             _ => unreachable!(),
         }
@@ -768,7 +771,7 @@ fn main() {
 }
 
 fn run_builtin(tokens: Vec<String>) {
-    let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit"];
+    let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
     if tokens.is_empty() { return; }
     let command = tokens[0].as_str();
     let args: Vec<String> = tokens[1..].iter().map(|s| s.to_string()).collect();
@@ -835,6 +838,9 @@ fn run_builtin(tokens: Vec<String>) {
                     }
                 }
             }
+        }
+        "history" => {
+            // Will implement listing in next step
         }
         _ => unreachable!(),
     }
