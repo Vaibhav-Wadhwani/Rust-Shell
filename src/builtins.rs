@@ -89,8 +89,12 @@ pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
             if tokens.len() == 3 && tokens[1] == "-w" {
                 let path = &tokens[2];
                 let mut hist = history.lock().unwrap();
-                // Add the current command to history before writing
-                hist.push(tokens.join(" "));
+                let this_cmd = tokens.join(" ");
+                // Only add if not already the last entry
+                let needs_push = hist.last().map(|e| e != &this_cmd).unwrap_or(true);
+                if needs_push {
+                    hist.push(this_cmd.clone());
+                }
                 let mut file = match std::fs::File::create(path) {
                     Ok(f) => f,
                     Err(e) => {
