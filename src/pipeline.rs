@@ -362,6 +362,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         }
                     }
                 }
+                // Fallback: try removing all backslashes if still not found
+                if !found && cmd.contains("\\") {
+                    let no_backslashes = cmd.replace("\\", "");
+                    for dir in path_var.split(':') {
+                        let path = std::path::Path::new(dir).join(&no_backslashes);
+                        if let Ok(metadata) = std::fs::metadata(&path) {
+                            if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                                found = true;
+                                exec_path = Some(path.to_string_lossy().to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             if !found {
                 println!("{}: command not found", cmd);
