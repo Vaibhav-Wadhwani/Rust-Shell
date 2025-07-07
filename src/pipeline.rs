@@ -329,10 +329,12 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
             // Check if command exists in PATH
             let cmd = &tokens[0];
             let mut found = false;
+            let mut exec_path = None;
             if cmd.contains('/') {
                 if let Ok(metadata) = std::fs::metadata(cmd) {
                     if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
                         found = true;
+                        exec_path = Some(cmd.clone());
                     }
                 }
             } else if let Ok(path_var) = env::var("PATH") {
@@ -341,7 +343,22 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     if let Ok(metadata) = std::fs::metadata(&path) {
                         if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
                             found = true;
+                            exec_path = Some(path.to_string_lossy().to_string());
                             break;
+                        }
+                    }
+                }
+                // Fallback: try unescaping single quotes if not found
+                if !found && cmd.contains("'") {
+                    let unquoted = cmd.replace("\\'", "'");
+                    for dir in path_var.split(':') {
+                        let path = std::path::Path::new(dir).join(&unquoted);
+                        if let Ok(metadata) = std::fs::metadata(&path) {
+                            if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                                found = true;
+                                exec_path = Some(path.to_string_lossy().to_string());
+                                break;
+                            }
                         }
                     }
                 }
@@ -381,8 +398,10 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     }
                     close(stderr_r).ok();
                     close(stderr_w).ok();
-                    let cmd = CString::new(tokens[0].clone()).unwrap();
-                    let args: Vec<CString> = tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                    let exec_cmd = exec_path.unwrap_or_else(|| tokens[0].clone());
+                    let cmd = CString::new(exec_cmd.clone()).unwrap();
+                    let mut args: Vec<CString> = tokens.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+                    args[0] = CString::new(exec_cmd).unwrap();
                     execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                 }
                 Ok(ForkResult::Parent { child }) => {
