@@ -135,7 +135,7 @@ fn unescape_backslashes(s: &str) -> String {
     result
 }
 
-fn command_handler(input: String) {
+fn command_handler(input: String, history: &Arc<Mutex<Vec<String>>>) {
     // Multi-stage pipeline support
     let mut stages = vec![];
     let mut in_single = false;
@@ -195,7 +195,7 @@ fn command_handler(input: String) {
                                 if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
                                 if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                             }
-                            run_builtin(tokens.clone());
+                            run_builtin(tokens.clone(), history);
                             std::io::stdout().flush().ok();
                             if stdout_fd != 1 {
                                 close(1).ok();
@@ -224,7 +224,7 @@ fn command_handler(input: String) {
                         if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
                         if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                     }
-                    run_builtin(tokens.clone());
+                    run_builtin(tokens.clone(), history);
                     std::io::stdout().flush().ok();
                     if stdout_fd != 1 {
                         close(1).ok();
@@ -765,7 +765,7 @@ fn main() {
                     let mut hist = history.lock().unwrap();
                     hist.push(trimmed.to_string());
                 }
-                command_handler(line);
+                command_handler(line, &history);
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 break;
@@ -778,43 +778,42 @@ fn main() {
     }
 }
 
-fn run_builtin(tokens: Vec<String>) {
+fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
     let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
     if tokens.is_empty() { return; }
     let command = tokens[0].as_str();
-    let args: Vec<String> = tokens[1..].iter().map(|s| s.to_string()).collect();
     match command {
         "exit" => std::process::exit(
-            args.get(0)
+            tokens.get(1)
                 .and_then(|s| s.parse::<i32>().ok())
                 .unwrap_or(255),
         ),
         "echo" => {
-            let output = args.join(" ");
+            let output = tokens[1..].join(" ");
             let _ = writeln_ignore_broken_pipe(std::io::stdout(), &output);
             let _ = std::io::stdout().flush();
         }
         "type" => {
-            if args.is_empty() {
+            if tokens.is_empty() {
                 return;
             }
-            match args[0].as_str() {
+            match tokens[0].as_str() {
                 "echo" | "exit" | "type" | "pwd" | "cd" | "history" => {
-                    println!("{} is a shell builtin", args[0])
+                    println!("{} is a shell builtin", tokens[0])
                 }
                 _ => {
                     let path = std::env::var("PATH").unwrap_or_default();
                     let paths = path.split(':');
                     for path in paths {
-                        let full_path = format!("{}/{}", path, args[0]);
+                        let full_path = format!("{}/{}", path, tokens[0]);
                         if let Ok(metadata) = std::fs::metadata(&full_path) {
                             if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
-                                println!("{} is {}", args[0], full_path);
+                                println!("{} is {}", tokens[0], full_path);
                                 return;
                             }
                         }
                     }
-                    println!("{}: not found", args[0])
+                    println!("{}: not found", tokens[0])
                 }
             }
         }
@@ -826,7 +825,7 @@ fn run_builtin(tokens: Vec<String>) {
             }
         }
         "cd" => {
-            if args.is_empty() {
+            if tokens.is_empty() {
                 let _ = writeln_ignore_broken_pipe(std::io::stdout(), "cd: missing argument");
                 return;
             }
