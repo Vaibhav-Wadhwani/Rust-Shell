@@ -9,19 +9,16 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
     let mut chars = line.chars().peekable();
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
-    let mut cur_quote = QuoteType::None;
     let mut last_quote = QuoteType::None;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
                 '\'' => {
                     state = State::Single;
-                    cur_quote = QuoteType::Single;
                     last_quote = QuoteType::Single;
                 },
                 '"' => {
                     state = State::Double;
-                    cur_quote = QuoteType::Double;
                     last_quote = QuoteType::Double;
                 },
                 '\\' => {
@@ -34,13 +31,11 @@ pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
                     if !cur.is_empty() {
                         tokens.push((cur.clone(), last_quote));
                         cur.clear();
-                        cur_quote = QuoteType::None;
                         last_quote = QuoteType::None;
                     }
                 }
                 _ => {
                     cur.push(ch);
-                    last_quote = QuoteType::None;
                 },
             },
             State::Single => match ch {
