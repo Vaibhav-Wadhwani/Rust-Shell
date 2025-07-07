@@ -345,7 +345,7 @@ fn command_handler(input: String) {
                     return;
                 }
                 match args[0].as_str() {
-                    "echo" | "exit" | "type" | "pwd" | "cd" => {
+                    "echo" | "exit" | "type" | "pwd" | "cd" | "history" => {
                         println!("{} is a shell builtin", args[0])
                     }
                     _ => {
@@ -791,8 +791,8 @@ fn run_builtin(tokens: Vec<String>) {
                 return;
             }
             match args[0].as_str() {
-                "echo" | "exit" | "type" | "pwd" | "cd" => {
-                    let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{} is a shell builtin", args[0]));
+                "echo" | "exit" | "type" | "pwd" | "cd" | "history" => {
+                    println!("{} is a shell builtin", args[0])
                 }
                 _ => {
                     let path = std::env::var("PATH").unwrap_or_default();
@@ -801,12 +801,12 @@ fn run_builtin(tokens: Vec<String>) {
                         let full_path = format!("{}/{}", path, args[0]);
                         if let Ok(metadata) = std::fs::metadata(&full_path) {
                             if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
-                                let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{} is {}", args[0], full_path));
+                                println!("{} is {}", args[0], full_path);
                                 return;
                             }
                         }
                     }
-                    let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("{}: not found", args[0]));
+                    println!("{}: not found", args[0])
                 }
             }
         }
