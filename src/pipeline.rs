@@ -243,16 +243,37 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                             let with_2_backslashes = format!("{}\\\\", s);
                                             let quoted_with_1_backslash = format!("'{}\\'", s);
                                             let quoted_with_2_backslashes = format!("'{}\\\\'", s);
-                                            if std::path::Path::new(&quoted).exists() {
-                                                return quoted;
-                                            } else if std::path::Path::new(&with_1_backslash).exists() {
-                                                return with_1_backslash;
-                                            } else if std::path::Path::new(&with_2_backslashes).exists() {
-                                                return with_2_backslashes;
-                                            } else if std::path::Path::new(&quoted_with_1_backslash).exists() {
-                                                return quoted_with_1_backslash;
-                                            } else if std::path::Path::new(&quoted_with_2_backslashes).exists() {
-                                                return quoted_with_2_backslashes;
+                                            let variants = [
+                                                &quoted,
+                                                &with_1_backslash,
+                                                &with_2_backslashes,
+                                                &quoted_with_1_backslash,
+                                                &quoted_with_2_backslashes,
+                                            ];
+                                            for v in variants.iter() {
+                                                if std::path::Path::new(v).exists() {
+                                                    return (*v).clone();
+                                                }
+                                            }
+                                            // Directory listing fallback
+                                            if let Some(parent) = std::path::Path::new(s).parent() {
+                                                if let Ok(entries) = std::fs::read_dir(parent) {
+                                                    for entry in entries.flatten() {
+                                                        let fname = entry.file_name().to_string_lossy().to_string();
+                                                        let mut arg = s.to_string();
+                                                        // Remove trailing backslashes and/or single quotes
+                                                        while arg.ends_with("\\") || arg.ends_with("'") {
+                                                            arg.pop();
+                                                        }
+                                                        let mut fname_cmp = fname.clone();
+                                                        while fname_cmp.ends_with("\\") || fname_cmp.ends_with("'") {
+                                                            fname_cmp.pop();
+                                                        }
+                                                        if fname_cmp == arg {
+                                                            return entry.path().to_string_lossy().to_string();
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                         s.clone()
@@ -515,16 +536,37 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                         let with_2_backslashes = format!("{}\\\\", s);
                                         let quoted_with_1_backslash = format!("'{}\\'", s);
                                         let quoted_with_2_backslashes = format!("'{}\\\\'", s);
-                                        if std::path::Path::new(&quoted).exists() {
-                                            return quoted;
-                                        } else if std::path::Path::new(&with_1_backslash).exists() {
-                                            return with_1_backslash;
-                                        } else if std::path::Path::new(&with_2_backslashes).exists() {
-                                            return with_2_backslashes;
-                                        } else if std::path::Path::new(&quoted_with_1_backslash).exists() {
-                                            return quoted_with_1_backslash;
-                                        } else if std::path::Path::new(&quoted_with_2_backslashes).exists() {
-                                            return quoted_with_2_backslashes;
+                                        let variants = [
+                                            &quoted,
+                                            &with_1_backslash,
+                                            &with_2_backslashes,
+                                            &quoted_with_1_backslash,
+                                            &quoted_with_2_backslashes,
+                                        ];
+                                        for v in variants.iter() {
+                                            if std::path::Path::new(v).exists() {
+                                                return (*v).clone();
+                                            }
+                                        }
+                                        // Directory listing fallback
+                                        if let Some(parent) = std::path::Path::new(s).parent() {
+                                            if let Ok(entries) = std::fs::read_dir(parent) {
+                                                for entry in entries.flatten() {
+                                                    let fname = entry.file_name().to_string_lossy().to_string();
+                                                    let mut arg = s.to_string();
+                                                    // Remove trailing backslashes and/or single quotes
+                                                    while arg.ends_with("\\") || arg.ends_with("'") {
+                                                        arg.pop();
+                                                    }
+                                                    let mut fname_cmp = fname.clone();
+                                                    while fname_cmp.ends_with("\\") || fname_cmp.ends_with("'") {
+                                                        fname_cmp.pop();
+                                                    }
+                                                    if fname_cmp == arg {
+                                                        return entry.path().to_string_lossy().to_string();
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                     s.clone()
