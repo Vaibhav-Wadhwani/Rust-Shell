@@ -1,7 +1,7 @@
 // pipeline.rs
 
 use std::sync::{Arc, Mutex};
-use crate::parser::shell_split_shell_like;
+use crate::parser::{shell_split_shell_like, unescape_backslashes, QuoteType};
 use crate::builtins::run_builtin;
 use crate::util::writeln_ignore_broken_pipe;
 use nix::unistd::{fork, ForkResult, pipe, dup2, close, execvp};
@@ -15,7 +15,6 @@ use std::io::{BufRead, BufReader};
 use std::io::Write;
 use std::env;
 use std::os::unix::fs::PermissionsExt;
-use crate::parser::unescape_backslashes;
 
 pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
     let mut stages = vec![];
@@ -44,39 +43,43 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
         let mut children = Vec::new();
         let mut child_stderr_fds = Vec::new();
         for i in 0..stages.len() {
-            let tokens = shell_split_shell_like(&stages[i]);
-            if tokens.is_empty() { continue; }
+            let token_pairs = shell_split_shell_like(&stages[i]);
+            if token_pairs.is_empty() { continue; }
             // Redirection file creation logic
             let mut j = 0;
             let mut filtered_tokens = vec![];
+            let mut filtered_quotes = vec![];
             let mut stderr_file: Option<(String, bool)> = None; // (filename, append)
             let mut stdout_file: Option<(String, bool)> = None; // (filename, append)
-            while j < tokens.len() {
-                if (tokens[j] == ">" || tokens[j] == "1>") && j + 1 < tokens.len() {
-                    let _ = std::fs::File::create(&tokens[j + 1]);
-                    stdout_file = Some((tokens[j + 1].clone(), false));
+            while j < token_pairs.len() {
+                let (ref token, ref quote) = token_pairs[j];
+                if (token == ">" || token == "1>") && j + 1 < token_pairs.len() {
+                    let _ = std::fs::File::create(&token_pairs[j + 1].0);
+                    stdout_file = Some((token_pairs[j + 1].0.clone(), false));
                     j += 2;
                     continue;
-                } else if (tokens[j] == ">>" || tokens[j] == "1>>") && j + 1 < tokens.len() {
-                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
-                    stdout_file = Some((tokens[j + 1].clone(), true));
+                } else if (token == ">>" || token == "1>>") && j + 1 < token_pairs.len() {
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&token_pairs[j + 1].0);
+                    stdout_file = Some((token_pairs[j + 1].0.clone(), true));
                     j += 2;
                     continue;
-                } else if tokens[j] == "2>" && j + 1 < tokens.len() {
-                    let _ = std::fs::File::create(&tokens[j + 1]);
-                    stderr_file = Some((tokens[j + 1].clone(), false));
+                } else if token == "2>" && j + 1 < token_pairs.len() {
+                    let _ = std::fs::File::create(&token_pairs[j + 1].0);
+                    stderr_file = Some((token_pairs[j + 1].0.clone(), false));
                     j += 2;
                     continue;
-                } else if tokens[j] == "2>>" && j + 1 < tokens.len() {
-                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
-                    stderr_file = Some((tokens[j + 1].clone(), true));
+                } else if token == "2>>" && j + 1 < token_pairs.len() {
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&token_pairs[j + 1].0);
+                    stderr_file = Some((token_pairs[j + 1].0.clone(), true));
                     j += 2;
                     continue;
                 }
-                filtered_tokens.push(tokens[j].clone());
+                filtered_tokens.push(token.clone());
+                filtered_quotes.push(*quote);
                 j += 1;
             }
             let tokens = filtered_tokens;
+            let quotes = filtered_quotes;
             let is_builtin = shell_like_builtins.contains(&tokens[0].as_str());
             let (stdin_fd, stdout_fd) = match stages.len() {
                 1 => (0, 1),
@@ -165,7 +168,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         if let Ok(f) = file {
                             dup2(f.as_raw_fd(), 1).ok();
                         }
-                    } else if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                    }
                     // Handle 2> or 2>>
                     if let Some((filename, append)) = &stderr_file {
                         use std::os::unix::io::AsRawFd;
@@ -230,9 +233,10 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         close(stderr_r).ok();
                         close(stderr_w).ok();
                         let cmd = CString::new(tokens[0].clone()).unwrap();
-                        use crate::parser::unescape_backslashes;
                         let args: Vec<CString> = std::iter::once(tokens[0].clone())
-                            .chain(tokens.iter().skip(1).map(|s| unescape_backslashes(s)))
+                            .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)|
+                                if *q == QuoteType::Single { s.clone() } else { unescape_backslashes(s) }
+                            ))
                             .map(|s| CString::new(s).unwrap())
                             .collect();
                         execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
@@ -262,39 +266,43 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
             }
         }
     } else {
-        let tokens = shell_split_shell_like(input);
-        if tokens.is_empty() { return; }
+        let token_pairs = shell_split_shell_like(input);
+        if token_pairs.is_empty() { return; }
         // Redirection file creation logic
         let mut j = 0;
         let mut filtered_tokens = vec![];
+        let mut filtered_quotes = vec![];
         let mut stderr_file: Option<(String, bool)> = None;
         let mut stdout_file: Option<(String, bool)> = None;
-        while j < tokens.len() {
-            if (tokens[j] == ">" || tokens[j] == "1>") && j + 1 < tokens.len() {
-                let _ = std::fs::File::create(&tokens[j + 1]);
-                stdout_file = Some((tokens[j + 1].clone(), false));
+        while j < token_pairs.len() {
+            let (ref token, ref quote) = token_pairs[j];
+            if (token == ">" || token == "1>") && j + 1 < token_pairs.len() {
+                let _ = std::fs::File::create(&token_pairs[j + 1].0);
+                stdout_file = Some((token_pairs[j + 1].0.clone(), false));
                 j += 2;
                 continue;
-            } else if (tokens[j] == ">>" || tokens[j] == "1>>") && j + 1 < tokens.len() {
-                let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
-                stdout_file = Some((tokens[j + 1].clone(), true));
+            } else if (token == ">>" || token == "1>>") && j + 1 < token_pairs.len() {
+                let _ = std::fs::OpenOptions::new().create(true).append(true).open(&token_pairs[j + 1].0);
+                stdout_file = Some((token_pairs[j + 1].0.clone(), true));
                 j += 2;
                 continue;
-            } else if tokens[j] == "2>" && j + 1 < tokens.len() {
-                let _ = std::fs::File::create(&tokens[j + 1]);
-                stderr_file = Some((tokens[j + 1].clone(), false));
+            } else if token == "2>" && j + 1 < token_pairs.len() {
+                let _ = std::fs::File::create(&token_pairs[j + 1].0);
+                stderr_file = Some((token_pairs[j + 1].0.clone(), false));
                 j += 2;
                 continue;
-            } else if tokens[j] == "2>>" && j + 1 < tokens.len() {
-                let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
-                stderr_file = Some((tokens[j + 1].clone(), true));
+            } else if token == "2>>" && j + 1 < token_pairs.len() {
+                let _ = std::fs::OpenOptions::new().create(true).append(true).open(&token_pairs[j + 1].0);
+                stderr_file = Some((token_pairs[j + 1].0.clone(), true));
                 j += 2;
                 continue;
             }
-            filtered_tokens.push(tokens[j].clone());
+            filtered_tokens.push(token.clone());
+            filtered_quotes.push(*quote);
             j += 1;
         }
         let tokens = filtered_tokens;
+        let quotes = filtered_quotes;
         if tokens.is_empty() { return; }
         let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
         if shell_like_builtins.contains(&tokens[0].as_str()) {
@@ -474,9 +482,10 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     close(stderr_w).ok();
                     let exec_cmd = exec_path.unwrap_or_else(|| tokens[0].trim().to_string());
                     let cmd = CString::new(exec_cmd.clone()).unwrap();
-                    use crate::parser::unescape_backslashes;
                     let args: Vec<CString> = std::iter::once(tokens[0].clone())
-                        .chain(tokens.iter().skip(1).map(|s| unescape_backslashes(s)))
+                        .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)|
+                            if *q == QuoteType::Single { s.clone() } else { unescape_backslashes(s) }
+                        ))
                         .map(|s| CString::new(s).unwrap())
                         .collect();
                     execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });

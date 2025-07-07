@@ -1,16 +1,20 @@
 // parser.rs
 
-pub fn shell_split_shell_like(line: &str) -> Vec<String> {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum QuoteType { None, Single, Double }
+
+pub fn shell_split_shell_like(line: &str) -> Vec<(String, QuoteType)> {
     let mut tokens = Vec::new();
     let mut cur = String::new();
     let mut chars = line.chars().peekable();
     enum State { Normal, Single, Double }
     let mut state = State::Normal;
+    let mut cur_quote = QuoteType::None;
     while let Some(ch) = chars.next() {
         match state {
             State::Normal => match ch {
-                '\'' => state = State::Single,
-                '"' => state = State::Double,
+                '\'' => { state = State::Single; cur_quote = QuoteType::Single; },
+                '"' => { state = State::Double; cur_quote = QuoteType::Double; },
                 '\\' => {
                     if let Some(&next) = chars.peek() {
                         cur.push(next);
@@ -19,18 +23,19 @@ pub fn shell_split_shell_like(line: &str) -> Vec<String> {
                 }
                 c if c.is_whitespace() => {
                     if !cur.is_empty() {
-                        tokens.push(cur.clone());
+                        tokens.push((cur.clone(), cur_quote));
                         cur.clear();
+                        cur_quote = QuoteType::None;
                     }
                 }
                 _ => cur.push(ch),
             },
             State::Single => match ch {
-                '\'' => state = State::Normal,
+                '\'' => { state = State::Normal; },
                 _ => cur.push(ch),
             },
             State::Double => match ch {
-                '"' => state = State::Normal,
+                '"' => { state = State::Normal; },
                 '\\' => {
                     if let Some(&next) = chars.peek() {
                         match next {
@@ -57,7 +62,7 @@ pub fn shell_split_shell_like(line: &str) -> Vec<String> {
         }
     }
     if !cur.is_empty() {
-        tokens.push(cur);
+        tokens.push((cur, cur_quote));
     }
     tokens
 }
