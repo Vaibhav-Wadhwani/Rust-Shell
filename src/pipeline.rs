@@ -48,6 +48,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
             // Redirection file creation logic
             let mut j = 0;
             let mut filtered_tokens = vec![];
+            let mut stderr_file: Option<(String, bool)> = None; // (filename, append)
             while j < tokens.len() {
                 if (tokens[j] == ">" || tokens[j] == "1>") && j + 1 < tokens.len() {
                     let _ = std::fs::File::create(&tokens[j + 1]);
@@ -55,6 +56,16 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     continue;
                 } else if (tokens[j] == ">>" || tokens[j] == "1>>") && j + 1 < tokens.len() {
                     let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
+                    j += 2;
+                    continue;
+                } else if tokens[j] == "2>" && j + 1 < tokens.len() {
+                    let _ = std::fs::File::create(&tokens[j + 1]);
+                    stderr_file = Some((tokens[j + 1].clone(), false));
+                    j += 2;
+                    continue;
+                } else if tokens[j] == "2>>" && j + 1 < tokens.len() {
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
+                    stderr_file = Some((tokens[j + 1].clone(), true));
                     j += 2;
                     continue;
                 }
@@ -138,7 +149,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     Ok(ForkResult::Child) => {
                         if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
                         if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
-                        dup2(stderr_w, 2).ok();
+                        // Handle 2> or 2>>
+                        if let Some((filename, append)) = &stderr_file {
+                            use std::os::unix::io::AsRawFd;
+                            let file = if *append {
+                                std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                            } else {
+                                std::fs::File::create(filename)
+                            };
+                            if let Ok(f) = file {
+                                dup2(f.as_raw_fd(), 2).ok();
+                            }
+                        } else {
+                            dup2(stderr_w, 2).ok();
+                        }
                         for (r, w) in &pipes { close(*r).ok(); close(*w).ok(); }
                         close(stderr_r).ok();
                         close(stderr_w).ok();
@@ -176,6 +200,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
         // Redirection file creation logic
         let mut j = 0;
         let mut filtered_tokens = vec![];
+        let mut stderr_file: Option<(String, bool)> = None;
         while j < tokens.len() {
             if (tokens[j] == ">" || tokens[j] == "1>") && j + 1 < tokens.len() {
                 let _ = std::fs::File::create(&tokens[j + 1]);
@@ -183,6 +208,16 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                 continue;
             } else if (tokens[j] == ">>" || tokens[j] == "1>>") && j + 1 < tokens.len() {
                 let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
+                j += 2;
+                continue;
+            } else if tokens[j] == "2>" && j + 1 < tokens.len() {
+                let _ = std::fs::File::create(&tokens[j + 1]);
+                stderr_file = Some((tokens[j + 1].clone(), false));
+                j += 2;
+                continue;
+            } else if tokens[j] == "2>>" && j + 1 < tokens.len() {
+                let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
+                stderr_file = Some((tokens[j + 1].clone(), true));
                 j += 2;
                 continue;
             }
@@ -222,7 +257,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
             let (stderr_r, stderr_w) = nix_pipe().unwrap();
             match unsafe { fork() } {
                 Ok(ForkResult::Child) => {
-                    dup2(stderr_w, 2).ok();
+                    // Handle 2> or 2>>
+                    if let Some((filename, append)) = &stderr_file {
+                        use std::os::unix::io::AsRawFd;
+                        let file = if *append {
+                            std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                        } else {
+                            std::fs::File::create(filename)
+                        };
+                        if let Ok(f) = file {
+                            dup2(f.as_raw_fd(), 2).ok();
+                        }
+                    } else {
+                        dup2(stderr_w, 2).ok();
+                    }
                     close(stderr_r).ok();
                     close(stderr_w).ok();
                     let cmd = CString::new(tokens[0].clone()).unwrap();
