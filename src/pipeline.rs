@@ -236,74 +236,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         let args: Vec<CString> = std::iter::once(tokens[0].clone())
                             .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
                                 match q {
-                                    QuoteType::Single | QuoteType::Double => {
-                                        if !s.starts_with('-') && !std::path::Path::new(s).exists() {
-                                            let quoted = format!("'{}'", s);
-                                            let with_1_backslash = format!("{}\\", s);
-                                            let with_2_backslashes = format!("{}\\\\", s);
-                                            let quoted_with_1_backslash = format!("'{}\\'", s);
-                                            let quoted_with_2_backslashes = format!("'{}\\\\'", s);
-                                            let variants = [
-                                                &quoted,
-                                                &with_1_backslash,
-                                                &with_2_backslashes,
-                                                &quoted_with_1_backslash,
-                                                &quoted_with_2_backslashes,
-                                            ];
-                                            for v in variants.iter() {
-                                                if std::path::Path::new(v).exists() {
-                                                    return (*v).clone();
-                                                }
-                                            }
-                                            // Directory listing fallback
-                                            if let Some(parent) = std::path::Path::new(s).parent() {
-                                                if let Ok(entries) = std::fs::read_dir(parent) {
-                                                    let mut arg = s.to_string();
-                                                    // Remove trailing backslashes and/or single quotes
-                                                    while arg.ends_with("\\") || arg.ends_with("'") {
-                                                        arg.pop();
-                                                    }
-                                                    // Exact match after cleaning
-                                                    for entry in entries.flatten() {
-                                                        let fname = entry.file_name().to_string_lossy().to_string();
-                                                        let mut fname_cmp = fname.clone();
-                                                        while fname_cmp.ends_with("\\") || fname_cmp.ends_with("'") {
-                                                            fname_cmp.pop();
-                                                        }
-                                                        if fname_cmp == arg {
-                                                            return entry.path().to_string_lossy().to_string();
-                                                        }
-                                                    }
-                                                    // Aggressive fallback: match prefix or substring
-                                                    if let Ok(entries2) = std::fs::read_dir(parent) {
-                                                        for entry in entries2.flatten() {
-                                                            let fname = entry.file_name().to_string_lossy().to_string();
-                                                            if fname.starts_with(&arg) || fname.contains(&arg) {
-                                                                return entry.path().to_string_lossy().to_string();
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        // Brute-force fallback: try replacing single/double backslashes
-                                        if !s.starts_with('-') && s.contains("\\") {
-                                            let single_to_double = s.replace("\\", "\\\\");
-                                            let double_to_single = s.replace("\\\\", "\\");
-                                            let brute_variants = [
-                                                single_to_double.clone(),
-                                                format!("'{}'", single_to_double),
-                                                double_to_single.clone(),
-                                                format!("'{}'", double_to_single),
-                                            ];
-                                            for variant in brute_variants.iter() {
-                                                if std::path::Path::new(variant).exists() {
-                                                    return variant.clone();
-                                                }
-                                            }
-                                        }
-                                        s.clone()
-                                    },
+                                    QuoteType::Single | QuoteType::Double => s.clone(),
                                     QuoteType::None => unescape_backslashes(s),
                                 }
                             }))
@@ -555,74 +488,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     let args: Vec<CString> = std::iter::once(tokens[0].clone())
                         .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
                             match q {
-                                QuoteType::Single | QuoteType::Double => {
-                                    if !s.starts_with('-') && !std::path::Path::new(s).exists() {
-                                        let quoted = format!("'{}'", s);
-                                        let with_1_backslash = format!("{}\\", s);
-                                        let with_2_backslashes = format!("{}\\\\", s);
-                                        let quoted_with_1_backslash = format!("'{}\\'", s);
-                                        let quoted_with_2_backslashes = format!("'{}\\\\'", s);
-                                        let variants = [
-                                            &quoted,
-                                            &with_1_backslash,
-                                            &with_2_backslashes,
-                                            &quoted_with_1_backslash,
-                                            &quoted_with_2_backslashes,
-                                        ];
-                                        for v in variants.iter() {
-                                            if std::path::Path::new(v).exists() {
-                                                return (*v).clone();
-                                            }
-                                        }
-                                        // Directory listing fallback
-                                        if let Some(parent) = std::path::Path::new(s).parent() {
-                                            if let Ok(entries) = std::fs::read_dir(parent) {
-                                                let mut arg = s.to_string();
-                                                // Remove trailing backslashes and/or single quotes
-                                                while arg.ends_with("\\") || arg.ends_with("'") {
-                                                    arg.pop();
-                                                }
-                                                // Exact match after cleaning
-                                                for entry in entries.flatten() {
-                                                    let fname = entry.file_name().to_string_lossy().to_string();
-                                                    let mut fname_cmp = fname.clone();
-                                                    while fname_cmp.ends_with("\\") || fname_cmp.ends_with("'") {
-                                                        fname_cmp.pop();
-                                                    }
-                                                    if fname_cmp == arg {
-                                                        return entry.path().to_string_lossy().to_string();
-                                                    }
-                                                }
-                                                // Aggressive fallback: match prefix or substring
-                                                if let Ok(entries2) = std::fs::read_dir(parent) {
-                                                    for entry in entries2.flatten() {
-                                                        let fname = entry.file_name().to_string_lossy().to_string();
-                                                        if fname.starts_with(&arg) || fname.contains(&arg) {
-                                                            return entry.path().to_string_lossy().to_string();
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // Brute-force fallback: try replacing single/double backslashes
-                                    if !s.starts_with('-') && s.contains("\\") {
-                                        let single_to_double = s.replace("\\", "\\\\");
-                                        let double_to_single = s.replace("\\\\", "\\");
-                                        let brute_variants = [
-                                            single_to_double.clone(),
-                                            format!("'{}'", single_to_double),
-                                            double_to_single.clone(),
-                                            format!("'{}'", double_to_single),
-                                        ];
-                                        for variant in brute_variants.iter() {
-                                            if std::path::Path::new(variant).exists() {
-                                                return variant.clone();
-                                            }
-                                        }
-                                    }
-                                    s.clone()
-                                },
+                                QuoteType::Single | QuoteType::Double => s.clone(),
                                 QuoteType::None => unescape_backslashes(s),
                             }
                         }))
