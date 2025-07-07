@@ -7,6 +7,7 @@ use rustyline::highlight::Highlighter;
 use rustyline::validate::{Validator, ValidationContext, ValidationResult};
 use rustyline::error::ReadlineError;
 use std::cell::RefCell;
+use std::os::unix::fs::PermissionsExt;
 
 pub struct BuiltinCompleter {
     pub last_prefix: RefCell<String>,

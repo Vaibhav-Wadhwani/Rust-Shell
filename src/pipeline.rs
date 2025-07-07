@@ -12,6 +12,7 @@ use std::os::unix::io::{RawFd, FromRawFd};
 use nix::unistd::pipe as nix_pipe;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::io::Write;
 
 pub fn execute_pipeline(input: &str) {
     let mut stages = vec![];

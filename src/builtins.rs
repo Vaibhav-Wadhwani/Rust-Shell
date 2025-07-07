@@ -3,6 +3,9 @@
 use std::env;
 use std::sync::{Arc, Mutex};
 use crate::util::writeln_ignore_broken_pipe;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::io::BufRead;
 
 pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
     if tokens.is_empty() { return; }
