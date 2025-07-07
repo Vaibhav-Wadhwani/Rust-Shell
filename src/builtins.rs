@@ -85,6 +85,25 @@ pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
                 }
                 return;
             }
+            // Implement history -w <file>
+            if tokens.len() == 3 && tokens[1] == "-w" {
+                let path = &tokens[2];
+                let mut hist = history.lock().unwrap();
+                // Add the current command to history before writing
+                hist.push(tokens.join(" "));
+                let mut file = match std::fs::File::create(path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("history: cannot write: {}", e));
+                        return;
+                    }
+                };
+                for entry in hist.iter() {
+                    let _ = writeln!(file, "{}", entry);
+                }
+                // Ensure trailing newline (already added by writeln!)
+                return;
+            }
             let hist = history.lock().unwrap();
             if tokens.len() == 2 {
                 if let Ok(n) = tokens[1].parse::<usize>() {
