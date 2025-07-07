@@ -680,26 +680,26 @@ fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
             let _ = std::io::stdout().flush();
         }
         "type" => {
-            if tokens.is_empty() {
+            if tokens.len() < 2 {
                 return;
             }
-            match tokens[0].as_str() {
+            match tokens[1].as_str() {
                 "echo" | "exit" | "type" | "pwd" | "cd" | "history" => {
-                    println!("{} is a shell builtin", tokens[0])
+                    println!("{} is a shell builtin", tokens[1])
                 }
                 _ => {
                     let path = std::env::var("PATH").unwrap_or_default();
                     let paths = path.split(':');
                     for path in paths {
-                        let full_path = format!("{}/{}", path, tokens[0]);
+                        let full_path = format!("{}/{}", path, tokens[1]);
                         if let Ok(metadata) = std::fs::metadata(&full_path) {
                             if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
-                                println!("{} is {}", tokens[0], full_path);
+                                println!("{} is {}", tokens[1], full_path);
                                 return;
                             }
                         }
                     }
-                    println!("{}: not found", tokens[0])
+                    println!("{}: not found", tokens[1])
                 }
             }
         }
