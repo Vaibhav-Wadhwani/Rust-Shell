@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::io::Write;
 
-pub fn execute_pipeline(input: &str) {
+pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
     let mut stages = vec![];
     let mut in_single = false;
     let mut in_double = false;
@@ -72,7 +72,7 @@ pub fn execute_pipeline(input: &str) {
                                 if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
                                 if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                             }
-                            run_builtin(tokens.clone(), &Arc::new(Mutex::new(Vec::new())));
+                            run_builtin(tokens.clone(), history);
                             std::io::stdout().flush().ok();
                             if stdout_fd != 1 {
                                 close(1).ok();
@@ -100,7 +100,7 @@ pub fn execute_pipeline(input: &str) {
                         if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
                         if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                     }
-                    run_builtin(tokens.clone(), &Arc::new(Mutex::new(Vec::new())));
+                    run_builtin(tokens.clone(), history);
                     std::io::stdout().flush().ok();
                     if stdout_fd != 1 {
                         close(1).ok();
@@ -151,7 +151,7 @@ pub fn execute_pipeline(input: &str) {
         if tokens.is_empty() { return; }
         let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
         if shell_like_builtins.contains(&tokens[0].as_str()) {
-            run_builtin(tokens, &Arc::new(Mutex::new(Vec::new())));
+            run_builtin(tokens, history);
         } else {
             let (stderr_r, stderr_w) = nix_pipe().unwrap();
             match unsafe { fork() } {

@@ -43,7 +43,7 @@ pub fn start_repl() {
                     let mut hist = history.lock().unwrap();
                     hist.push(trimmed.to_string());
                 }
-                execute_pipeline(&line);
+                execute_pipeline(&line, &history);
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 break;
