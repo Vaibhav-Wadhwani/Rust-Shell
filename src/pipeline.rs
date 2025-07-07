@@ -235,27 +235,9 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         let cmd = CString::new(tokens[0].clone()).unwrap();
                         let args: Vec<CString> = std::iter::once(tokens[0].clone())
                             .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
-                                if *q == QuoteType::Single {
-                                    if std::fs::metadata(s).is_ok() {
-                                        s.clone()
-                                    } else {
-                                        if s.ends_with("\\") {
-                                            let mut without_backslash = s[..s.len()-1].to_string();
-                                            without_backslash.push('\'');
-                                            if std::fs::metadata(&without_backslash).is_ok() {
-                                                return without_backslash;
-                                            }
-                                        }
-                                        let mut with_quote = s.clone();
-                                        with_quote.push('\'');
-                                        if std::fs::metadata(&with_quote).is_ok() {
-                                            with_quote
-                                        } else {
-                                            s.clone()
-                                        }
-                                    }
-                                } else {
-                                    unescape_backslashes(s)
+                                match q {
+                                    QuoteType::Single | QuoteType::Double => s.clone(),
+                                    QuoteType::None => unescape_backslashes(s),
                                 }
                             }))
                             .map(|s| CString::new(s).unwrap())
@@ -505,27 +487,9 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     let cmd = CString::new(exec_cmd.clone()).unwrap();
                     let args: Vec<CString> = std::iter::once(tokens[0].clone())
                         .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
-                            if *q == QuoteType::Single {
-                                if std::fs::metadata(s).is_ok() {
-                                    s.clone()
-                                } else {
-                                    if s.ends_with("\\") {
-                                        let mut without_backslash = s[..s.len()-1].to_string();
-                                        without_backslash.push('\'');
-                                        if std::fs::metadata(&without_backslash).is_ok() {
-                                            return without_backslash;
-                                        }
-                                    }
-                                    let mut with_quote = s.clone();
-                                    with_quote.push('\'');
-                                    if std::fs::metadata(&with_quote).is_ok() {
-                                        with_quote
-                                    } else {
-                                        s.clone()
-                                    }
-                                }
-                            } else {
-                                unescape_backslashes(s)
+                            match q {
+                                QuoteType::Single | QuoteType::Double => s.clone(),
+                                QuoteType::None => unescape_backslashes(s),
                             }
                         }))
                         .map(|s| CString::new(s).unwrap())
