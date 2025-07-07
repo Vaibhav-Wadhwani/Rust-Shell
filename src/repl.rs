@@ -7,6 +7,7 @@ use crate::completion::BuiltinCompleter;
 use crate::pipeline::execute_pipeline;
 use crate::history;
 use std::io::BufRead;
+use std::io::Write;
 
 pub fn start_repl() {
     let config = Config::builder().completion_type(CompletionType::List).build();
