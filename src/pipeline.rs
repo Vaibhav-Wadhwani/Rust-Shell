@@ -238,21 +238,14 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                 if *q == QuoteType::Single {
                                     if std::fs::metadata(s).is_ok() {
                                         s.clone()
-                                    } else if s.ends_with("\\") {
-                                        let mut without_backslash = s[..s.len()-1].to_string();
-                                        without_backslash.push('\'');
-                                        if std::fs::metadata(&without_backslash).is_ok() {
-                                            without_backslash
-                                        } else {
-                                            let mut with_quote = s.clone();
-                                            with_quote.push('\'');
-                                            if std::fs::metadata(&with_quote).is_ok() {
-                                                with_quote
-                                            } else {
-                                                s.clone()
+                                    } else {
+                                        if s.ends_with("\\") {
+                                            let mut without_backslash = s[..s.len()-1].to_string();
+                                            without_backslash.push('\'');
+                                            if std::fs::metadata(&without_backslash).is_ok() {
+                                                return without_backslash;
                                             }
                                         }
-                                    } else {
                                         let mut with_quote = s.clone();
                                         with_quote.push('\'');
                                         if std::fs::metadata(&with_quote).is_ok() {
@@ -515,21 +508,14 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                             if *q == QuoteType::Single {
                                 if std::fs::metadata(s).is_ok() {
                                     s.clone()
-                                } else if s.ends_with("\\") {
-                                    let mut without_backslash = s[..s.len()-1].to_string();
-                                    without_backslash.push('\'');
-                                    if std::fs::metadata(&without_backslash).is_ok() {
-                                        without_backslash
-                                    } else {
-                                        let mut with_quote = s.clone();
-                                        with_quote.push('\'');
-                                        if std::fs::metadata(&with_quote).is_ok() {
-                                            with_quote
-                                        } else {
-                                            s.clone()
+                                } else {
+                                    if s.ends_with("\\") {
+                                        let mut without_backslash = s[..s.len()-1].to_string();
+                                        without_backslash.push('\'');
+                                        if std::fs::metadata(&without_backslash).is_ok() {
+                                            return without_backslash;
                                         }
                                     }
-                                } else {
                                     let mut with_quote = s.clone();
                                     with_quote.push('\'');
                                     if std::fs::metadata(&with_quote).is_ok() {
