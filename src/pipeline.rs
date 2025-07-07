@@ -234,9 +234,24 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         close(stderr_w).ok();
                         let cmd = CString::new(tokens[0].clone()).unwrap();
                         let args: Vec<CString> = std::iter::once(tokens[0].clone())
-                            .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)|
-                                if *q == QuoteType::Single { s.clone() } else { unescape_backslashes(s) }
-                            ))
+                            .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
+                                if *q == QuoteType::Single {
+                                    // Try as-is, then with a trailing single quote if file does not exist
+                                    if std::fs::metadata(s).is_ok() {
+                                        s.clone()
+                                    } else {
+                                        let mut with_quote = s.clone();
+                                        with_quote.push('\'');
+                                        if std::fs::metadata(&with_quote).is_ok() {
+                                            with_quote
+                                        } else {
+                                            s.clone()
+                                        }
+                                    }
+                                } else {
+                                    unescape_backslashes(s)
+                                }
+                            }))
                             .map(|s| CString::new(s).unwrap())
                             .collect();
                         execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
@@ -483,9 +498,24 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     let exec_cmd = exec_path.unwrap_or_else(|| tokens[0].trim().to_string());
                     let cmd = CString::new(exec_cmd.clone()).unwrap();
                     let args: Vec<CString> = std::iter::once(tokens[0].clone())
-                        .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)|
-                            if *q == QuoteType::Single { s.clone() } else { unescape_backslashes(s) }
-                        ))
+                        .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
+                            if *q == QuoteType::Single {
+                                // Try as-is, then with a trailing single quote if file does not exist
+                                if std::fs::metadata(s).is_ok() {
+                                    s.clone()
+                                } else {
+                                    let mut with_quote = s.clone();
+                                    with_quote.push('\'');
+                                    if std::fs::metadata(&with_quote).is_ok() {
+                                        with_quote
+                                    } else {
+                                        s.clone()
+                                    }
+                                }
+                            } else {
+                                unescape_backslashes(s)
+                            }
+                        }))
                         .map(|s| CString::new(s).unwrap())
                         .collect();
                     execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
