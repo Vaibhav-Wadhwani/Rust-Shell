@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::io::BufRead;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-static LAST_A_IDX: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
+pub static LAST_A_IDX: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
 
 pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
     if tokens.is_empty() { return; }
