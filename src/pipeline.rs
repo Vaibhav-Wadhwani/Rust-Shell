@@ -259,7 +259,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                             if let Some(parent) = std::path::Path::new(s).parent() {
                                                 if let Ok(entries) = std::fs::read_dir(parent) {
                                                     for entry in entries.flatten() {
-                                                        let fname = entry.file_name().to_string_lossy();
+                                                        let fname = entry.file_name().to_string_lossy().to_string();
                                                         if fname.contains(s) || fname.contains(&quoted) {
                                                             return entry.path().to_string_lossy().to_string();
                                                         }
@@ -543,7 +543,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                         if let Some(parent) = std::path::Path::new(s).parent() {
                                             if let Ok(entries) = std::fs::read_dir(parent) {
                                                 for entry in entries.flatten() {
-                                                    let fname = entry.file_name().to_string_lossy();
+                                                    let fname = entry.file_name().to_string_lossy().to_string();
                                                     if fname.contains(s) || fname.contains(&quoted) {
                                                         return entry.path().to_string_lossy().to_string();
                                                     }
