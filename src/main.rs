@@ -284,7 +284,19 @@ fn command_handler(input: String, history: &Arc<Mutex<Vec<String>>>) {
     }
     let command = tokens_shell[0].as_str();
     if shell_like_builtins.contains(&command) {
-        run_builtin(tokens_shell, history);
+        // Filter out redirection tokens and their filenames
+        let mut filtered_tokens = vec![tokens_shell[0].clone()];
+        let mut i = 1;
+        while i < tokens_shell.len() {
+            let t = &tokens_shell[i];
+            if (t == ">" || t == ">>" || t == "1>" || t == "1>>" || t == "2>" || t == "2>>") && i + 1 < tokens_shell.len() {
+                i += 2; // skip this and the filename
+                continue;
+            }
+            filtered_tokens.push(t.clone());
+            i += 1;
+        }
+        run_builtin(filtered_tokens, history);
         return;
     }
     let tokens = shell_split_shell_like(input.trim());
