@@ -8,6 +8,7 @@ use crate::pipeline::execute_pipeline;
 use crate::history;
 use std::io::BufRead;
 use std::io::Write;
+use crate::builtins::LAST_A_IDX;
 
 pub fn start_repl() {
     let config = Config::builder().completion_type(CompletionType::List).build();
@@ -68,13 +69,18 @@ pub fn start_repl() {
             }
         }
     }
-    // After REPL loop, write history to HISTFILE if set
+    // After REPL loop, append new history to HISTFILE if set
     if let Ok(histfile) = std::env::var("HISTFILE") {
-        if let Ok(mut file) = std::fs::File::create(&histfile) {
+        let history = history.clone();
+        let last_a_idx = LAST_A_IDX.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+        let mut last_idx_map = last_a_idx.lock().unwrap();
+        let start = *last_idx_map.get(&histfile).unwrap_or(&0);
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&histfile) {
             let hist = history.lock().unwrap();
-            for entry in hist.iter() {
+            for entry in hist.iter().skip(start) {
                 let _ = writeln!(file, "{}", entry);
             }
+            last_idx_map.insert(histfile, hist.len());
         }
     }
 } 

@@ -6,24 +6,31 @@ use crate::util::writeln_ignore_broken_pipe;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::io::BufRead;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+static LAST_A_IDX: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
 
 pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
     if tokens.is_empty() { return; }
     let command = tokens[0].as_str();
     match command {
         "exit" => {
-            // Write history to HISTFILE before exiting
+            // Append new history to HISTFILE before exiting
             if let Ok(histfile) = std::env::var("HISTFILE") {
-                if let Ok(mut file) = std::fs::File::create(&histfile) {
-                    let mut hist = history.lock().unwrap();
-                    let this_cmd = tokens.join(" ");
-                    let needs_push = hist.last().map(|e| e != &this_cmd).unwrap_or(true);
-                    if needs_push {
-                        hist.push(this_cmd.clone());
-                    }
-                    for entry in hist.iter() {
+                let mut hist = history.lock().unwrap();
+                let this_cmd = tokens.join(" ");
+                let needs_push = hist.last().map(|e| e != &this_cmd).unwrap_or(true);
+                if needs_push {
+                    hist.push(this_cmd.clone());
+                }
+                let last_a_idx = LAST_A_IDX.get_or_init(|| Mutex::new(HashMap::new()));
+                let mut last_idx_map = last_a_idx.lock().unwrap();
+                let start = *last_idx_map.get(&histfile).unwrap_or(&0);
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&histfile) {
+                    for entry in hist.iter().skip(start) {
                         let _ = writeln!(file, "{}", entry);
                     }
+                    last_idx_map.insert(histfile, hist.len());
                 }
             }
             std::process::exit(
@@ -126,10 +133,6 @@ pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
             }
             // Implement history -a <file>
             if tokens.len() == 3 && tokens[1] == "-a" {
-                use std::collections::HashMap;
-                use std::sync::OnceLock;
-                static LAST_A_IDX: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
-                let last_a_idx = LAST_A_IDX.get_or_init(|| Mutex::new(HashMap::new()));
                 let path = tokens[2].clone();
                 let mut hist = history.lock().unwrap();
                 let this_cmd = tokens.join(" ");
