@@ -286,6 +286,22 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                 }
                                             }
                                         }
+                                        // Brute-force fallback: try replacing single/double backslashes
+                                        if !s.starts_with('-') && s.contains("\\") {
+                                            let single_to_double = s.replace("\\", "\\\\");
+                                            let double_to_single = s.replace("\\\\", "\\");
+                                            let brute_variants = [
+                                                single_to_double.clone(),
+                                                format!("'{}'", single_to_double),
+                                                double_to_single.clone(),
+                                                format!("'{}'", double_to_single),
+                                            ];
+                                            for variant in brute_variants.iter() {
+                                                if std::path::Path::new(variant).exists() {
+                                                    return variant.clone();
+                                                }
+                                            }
+                                        }
                                         s.clone()
                                     },
                                     QuoteType::None => unescape_backslashes(s),
@@ -586,6 +602,22 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                         }
                                                     }
                                                 }
+                                            }
+                                        }
+                                    }
+                                    // Brute-force fallback: try replacing single/double backslashes
+                                    if !s.starts_with('-') && s.contains("\\") {
+                                        let single_to_double = s.replace("\\", "\\\\");
+                                        let double_to_single = s.replace("\\\\", "\\");
+                                        let brute_variants = [
+                                            single_to_double.clone(),
+                                            format!("'{}'", single_to_double),
+                                            double_to_single.clone(),
+                                            format!("'{}'", double_to_single),
+                                        ];
+                                        for variant in brute_variants.iter() {
+                                            if std::path::Path::new(variant).exists() {
+                                                return variant.clone();
                                             }
                                         }
                                     }
