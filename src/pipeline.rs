@@ -13,6 +13,8 @@ use nix::unistd::pipe as nix_pipe;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::io::Write;
+use std::env;
+use std::os::unix::fs::PermissionsExt;
 
 pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
     let mut stages = vec![];
@@ -153,6 +155,30 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
         if shell_like_builtins.contains(&tokens[0].as_str()) {
             run_builtin(tokens, history);
         } else {
+            // Check if command exists in PATH
+            let cmd = &tokens[0];
+            let mut found = false;
+            if cmd.contains('/') {
+                if let Ok(metadata) = std::fs::metadata(cmd) {
+                    if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                        found = true;
+                    }
+                }
+            } else if let Ok(path_var) = env::var("PATH") {
+                for dir in path_var.split(':') {
+                    let path = std::path::Path::new(dir).join(cmd);
+                    if let Ok(metadata) = std::fs::metadata(&path) {
+                        if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !found {
+                println!("{}: command not found", cmd);
+                return;
+            }
             let (stderr_r, stderr_w) = nix_pipe().unwrap();
             match unsafe { fork() } {
                 Ok(ForkResult::Child) => {
