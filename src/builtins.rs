@@ -15,7 +15,12 @@ pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
             // Write history to HISTFILE before exiting
             if let Ok(histfile) = std::env::var("HISTFILE") {
                 if let Ok(mut file) = std::fs::File::create(&histfile) {
-                    let hist = history.lock().unwrap();
+                    let mut hist = history.lock().unwrap();
+                    let this_cmd = tokens.join(" ");
+                    let needs_push = hist.last().map(|e| e != &this_cmd).unwrap_or(true);
+                    if needs_push {
+                        hist.push(this_cmd.clone());
+                    }
                     for entry in hist.iter() {
                         let _ = writeln!(file, "{}", entry);
                     }
