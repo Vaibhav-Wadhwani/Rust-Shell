@@ -236,7 +236,15 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         let args: Vec<CString> = std::iter::once(tokens[0].clone())
                             .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
                                 match q {
-                                    QuoteType::Single | QuoteType::Double => s.clone(),
+                                    QuoteType::Single | QuoteType::Double => {
+                                        if !s.starts_with('-') && !std::path::Path::new(s).exists() {
+                                            let quoted = format!("'{}'", s);
+                                            if std::path::Path::new(&quoted).exists() {
+                                                return quoted;
+                                            }
+                                        }
+                                        s.clone()
+                                    },
                                     QuoteType::None => unescape_backslashes(s),
                                 }
                             }))
@@ -488,7 +496,15 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     let args: Vec<CString> = std::iter::once(tokens[0].clone())
                         .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
                             match q {
-                                QuoteType::Single | QuoteType::Double => s.clone(),
+                                QuoteType::Single | QuoteType::Double => {
+                                    if !s.starts_with('-') && !std::path::Path::new(s).exists() {
+                                        let quoted = format!("'{}'", s);
+                                        if std::path::Path::new(&quoted).exists() {
+                                            return quoted;
+                                        }
+                                    }
+                                    s.clone()
+                                },
                                 QuoteType::None => unescape_backslashes(s),
                             }
                         }))
