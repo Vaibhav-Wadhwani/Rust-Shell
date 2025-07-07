@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::completion::BuiltinCompleter;
 use crate::pipeline::execute_pipeline;
 use crate::history;
+use std::io::BufRead;
 
 pub fn start_repl() {
     let config = Config::builder().completion_type(CompletionType::List).build();
