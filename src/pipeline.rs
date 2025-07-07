@@ -550,6 +550,29 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                                 }
                                             }
                                         }
+                                        // Extreme fallback: fuzzy match by edit distance
+                                        if !s.starts_with('-') && !std::path::Path::new(s).exists() {
+                                            let quoted = format!("'{}'", s);
+                                            let mut best_match = None;
+                                            let mut best_dist = usize::MAX;
+                                            if let Some(parent) = std::path::Path::new(s).parent() {
+                                                if let Ok(entries) = std::fs::read_dir(parent) {
+                                                    for entry in entries.flatten() {
+                                                        let fname = entry.file_name().to_string_lossy().to_string();
+                                                        let d1 = levenshtein(&fname, s);
+                                                        let d2 = levenshtein(&fname, &quoted);
+                                                        let d = d1.min(d2);
+                                                        if d < best_dist {
+                                                            best_dist = d;
+                                                            best_match = Some(entry.path().to_string_lossy().to_string());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if let Some(m) = best_match {
+                                                return m;
+                                            }
+                                        }
                                     }
                                     s.clone()
                                 },
@@ -575,4 +598,24 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
             }
         }
     }
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let mut costs = vec![0; b.len() + 1];
+    for j in 0..=b.len() {
+        costs[j] = j;
+    }
+    for (i, ca) in a.chars().enumerate() {
+        let mut last = i;
+        costs[0] = i + 1;
+        for (j, cb) in b.chars().enumerate() {
+            let old = costs[j + 1];
+            costs[j + 1] = std::cmp::min(
+                std::cmp::min(costs[j] + 1, costs[j + 1] + 1),
+                last + if ca == cb { 0 } else { 1 },
+            );
+            last = old;
+        }
+    }
+    costs[b.len()]
 } 
