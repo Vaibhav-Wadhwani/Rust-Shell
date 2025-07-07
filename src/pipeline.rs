@@ -242,6 +242,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                             }))
                             .map(|s| CString::new(s).unwrap())
                             .collect();
+                        eprintln!("[DEBUG] execvp args: {:?}", args);
                         execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                     }
                     Ok(ForkResult::Parent { child }) => {
@@ -494,6 +495,7 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         }))
                         .map(|s| CString::new(s).unwrap())
                         .collect();
+                    eprintln!("[DEBUG] execvp args: {:?}", args);
                     execvp(&cmd, &args).unwrap_or_else(|_| { unsafe { libc::_exit(127) } });
                 }
                 Ok(ForkResult::Parent { child }) => {
