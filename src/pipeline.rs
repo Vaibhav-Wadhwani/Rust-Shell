@@ -236,9 +236,22 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         let args: Vec<CString> = std::iter::once(tokens[0].clone())
                             .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
                                 if *q == QuoteType::Single {
-                                    // Try as-is, then with a trailing single quote if file does not exist
                                     if std::fs::metadata(s).is_ok() {
                                         s.clone()
+                                    } else if s.ends_with("\\'") {
+                                        let mut without_backslash = s[..s.len()-2].to_string();
+                                        without_backslash.push('\'');
+                                        if std::fs::metadata(&without_backslash).is_ok() {
+                                            without_backslash
+                                        } else {
+                                            let mut with_quote = s.clone();
+                                            with_quote.push('\'');
+                                            if std::fs::metadata(&with_quote).is_ok() {
+                                                with_quote
+                                            } else {
+                                                s.clone()
+                                            }
+                                        }
                                     } else {
                                         let mut with_quote = s.clone();
                                         with_quote.push('\'');
@@ -500,9 +513,22 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                     let args: Vec<CString> = std::iter::once(tokens[0].clone())
                         .chain(tokens.iter().zip(quotes.iter()).skip(1).map(|(s, q)| {
                             if *q == QuoteType::Single {
-                                // Try as-is, then with a trailing single quote if file does not exist
                                 if std::fs::metadata(s).is_ok() {
                                     s.clone()
+                                } else if s.ends_with("\\'") {
+                                    let mut without_backslash = s[..s.len()-2].to_string();
+                                    without_backslash.push('\'');
+                                    if std::fs::metadata(&without_backslash).is_ok() {
+                                        without_backslash
+                                    } else {
+                                        let mut with_quote = s.clone();
+                                        with_quote.push('\'');
+                                        if std::fs::metadata(&with_quote).is_ok() {
+                                            with_quote
+                                        } else {
+                                            s.clone()
+                                        }
+                                    }
                                 } else {
                                     let mut with_quote = s.clone();
                                     with_quote.push('\'');
