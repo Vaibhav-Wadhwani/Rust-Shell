@@ -239,8 +239,21 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                     QuoteType::Single | QuoteType::Double => {
                                         if !s.starts_with('-') && !std::path::Path::new(s).exists() {
                                             let quoted = format!("'{}'", s);
-                                            if std::path::Path::new(&quoted).exists() {
-                                                return quoted;
+                                            let with_1_backslash = format!("{}\\", s);
+                                            let quoted_with_1_backslash = format!("'{}\\'", s);
+                                            let with_2_backslashes = format!("{}\\\\", s);
+                                            let quoted_with_2_backslashes = format!("'{}\\\\'", s);
+                                            let variants = [
+                                                &quoted,
+                                                &with_1_backslash,
+                                                &quoted_with_1_backslash,
+                                                &with_2_backslashes,
+                                                &quoted_with_2_backslashes,
+                                            ];
+                                            for v in variants.iter() {
+                                                if std::path::Path::new(v).exists() {
+                                                    return (*v).clone();
+                                                }
                                             }
                                         }
                                         s.clone()
@@ -499,8 +512,21 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                 QuoteType::Single | QuoteType::Double => {
                                     if !s.starts_with('-') && !std::path::Path::new(s).exists() {
                                         let quoted = format!("'{}'", s);
-                                        if std::path::Path::new(&quoted).exists() {
-                                            return quoted;
+                                        let with_1_backslash = format!("{}\\", s);
+                                        let quoted_with_1_backslash = format!("'{}\\'", s);
+                                        let with_2_backslashes = format!("{}\\\\", s);
+                                        let quoted_with_2_backslashes = format!("'{}\\\\'", s);
+                                        let variants = [
+                                            &quoted,
+                                            &with_1_backslash,
+                                            &quoted_with_1_backslash,
+                                            &with_2_backslashes,
+                                            &quoted_with_2_backslashes,
+                                        ];
+                                        for v in variants.iter() {
+                                            if std::path::Path::new(v).exists() {
+                                                return (*v).clone();
+                                            }
                                         }
                                     }
                                     s.clone()
