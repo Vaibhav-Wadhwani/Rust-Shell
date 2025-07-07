@@ -11,11 +11,22 @@ pub fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
     if tokens.is_empty() { return; }
     let command = tokens[0].as_str();
     match command {
-        "exit" => std::process::exit(
-            tokens.get(1)
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(255),
-        ),
+        "exit" => {
+            // Write history to HISTFILE before exiting
+            if let Ok(histfile) = std::env::var("HISTFILE") {
+                if let Ok(mut file) = std::fs::File::create(&histfile) {
+                    let hist = history.lock().unwrap();
+                    for entry in hist.iter() {
+                        let _ = writeln!(file, "{}", entry);
+                    }
+                }
+            }
+            std::process::exit(
+                tokens.get(1)
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .unwrap_or(255),
+            )
+        },
         "echo" => {
             let output = tokens[1..].join(" ");
             let _ = writeln_ignore_broken_pipe(std::io::stdout(), &output);
