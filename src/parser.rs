@@ -39,6 +39,7 @@ pub fn shell_split_shell_like(line: &str) -> Vec<String> {
                                 chars.next();
                             }
                             '\'' => {
+                                cur.push('\'');
                                 chars.next();
                             }
                             _ => {
