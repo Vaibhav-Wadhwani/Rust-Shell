@@ -404,6 +404,19 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         }
                     }
                 }
+                // Absolute last fallback: try the original token as-is (with all backslashes and single quotes)
+                if !found {
+                    for dir in path_var.split(':') {
+                        let path = std::path::Path::new(dir).join(tokens[0].as_str());
+                        if let Ok(metadata) = std::fs::metadata(&path) {
+                            if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
+                                found = true;
+                                exec_path = Some(path.to_string_lossy().to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             if !found {
                 println!("{}: command not found", cmd);
