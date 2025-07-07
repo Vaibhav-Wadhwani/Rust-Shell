@@ -99,20 +99,44 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                         Ok(ForkResult::Child) => {
                             let orig_stdin: Option<RawFd> = if stdin_fd != 0 { dup2(0, 1000 + i as i32).ok() } else { None };
                             let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
+                            let orig_stderr: Option<RawFd> = Some(dup2(2, 3000 + i as i32).unwrap());
                             if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
-                            if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                            // Handle >, 1>, >>, 1>>
+                            if let Some((filename, append)) = &stdout_file {
+                                use std::os::unix::io::AsRawFd;
+                                let file = if *append {
+                                    std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                                } else {
+                                    std::fs::File::create(filename)
+                                };
+                                if let Ok(f) = file {
+                                    dup2(f.as_raw_fd(), 1).ok();
+                                }
+                            } else if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                            // Handle 2> or 2>>
+                            if let Some((filename, append)) = &stderr_file {
+                                use std::os::unix::io::AsRawFd;
+                                let file = if *append {
+                                    std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                                } else {
+                                    std::fs::File::create(filename)
+                                };
+                                if let Ok(f) = file {
+                                    dup2(f.as_raw_fd(), 2).ok();
+                                }
+                            }
                             for (j, (r, w)) in pipes.iter().enumerate() {
                                 if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
                                 if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                             }
                             run_builtin(tokens.clone(), history);
                             std::io::stdout().flush().ok();
+                            // Restore fds
+                            if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                            if let Some(fd) = orig_stderr { dup2(fd, 2).ok(); if fd != 0 && fd != 1 && fd != 2 { close(fd).ok(); } }
                             if stdout_fd != 1 {
                                 close(1).ok();
                                 if stdout_fd != 0 { close(stdout_fd).ok(); }
-                                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
-                            } else {
-                                if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
                             }
                             if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
                             if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
@@ -127,20 +151,44 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                 } else {
                     let orig_stdin: Option<RawFd> = if stdin_fd != 0 { dup2(0, 1000 + i as i32).ok() } else { None };
                     let orig_stdout: Option<RawFd> = if stdout_fd != 1 { dup2(1, 2000 + i as i32).ok() } else { None };
+                    let orig_stderr: Option<RawFd> = Some(dup2(2, 3000 + i as i32).unwrap());
                     if stdin_fd != 0 { dup2(stdin_fd, 0).ok(); }
-                    if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                    // Handle >, 1>, >>, 1>>
+                    if let Some((filename, append)) = &stdout_file {
+                        use std::os::unix::io::AsRawFd;
+                        let file = if *append {
+                            std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                        } else {
+                            std::fs::File::create(filename)
+                        };
+                        if let Ok(f) = file {
+                            dup2(f.as_raw_fd(), 1).ok();
+                        }
+                    } else if stdout_fd != 1 { dup2(stdout_fd, 1).ok(); }
+                    // Handle 2> or 2>>
+                    if let Some((filename, append)) = &stderr_file {
+                        use std::os::unix::io::AsRawFd;
+                        let file = if *append {
+                            std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                        } else {
+                            std::fs::File::create(filename)
+                        };
+                        if let Ok(f) = file {
+                            dup2(f.as_raw_fd(), 2).ok();
+                        }
+                    }
                     for (j, (r, w)) in pipes.iter().enumerate() {
                         if j != i - 1 && *r != 0 && *r != 1 { close(*r).ok(); }
                         if j != i && *w != 0 && *w != 1 { close(*w).ok(); }
                     }
                     run_builtin(tokens.clone(), history);
                     std::io::stdout().flush().ok();
+                    // Restore fds
+                    if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+                    if let Some(fd) = orig_stderr { dup2(fd, 2).ok(); if fd != 0 && fd != 1 && fd != 2 { close(fd).ok(); } }
                     if stdout_fd != 1 {
                         close(1).ok();
                         if stdout_fd != 0 { close(stdout_fd).ok(); }
-                        if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
-                    } else {
-                        if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
                     }
                     if let Some(fd) = orig_stdin { dup2(fd, 0).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
                     if stdin_fd != 0 && stdin_fd != 1 { close(stdin_fd).ok(); }
@@ -245,7 +293,38 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
         if tokens.is_empty() { return; }
         let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
         if shell_like_builtins.contains(&tokens[0].as_str()) {
+            // Handle >, 1>, >>, 1>>, 2>, 2>> for single builtins
+            let orig_stdout: Option<RawFd> = Some(dup2(1, 2000).unwrap());
+            let orig_stderr: Option<RawFd> = Some(dup2(2, 3000).unwrap());
+            // Handle >, 1>, >>, 1>>
+            if let Some((filename, append)) = &stdout_file {
+                use std::os::unix::io::AsRawFd;
+                let file = if *append {
+                    std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                } else {
+                    std::fs::File::create(filename)
+                };
+                if let Ok(f) = file {
+                    dup2(f.as_raw_fd(), 1).ok();
+                }
+            }
+            // Handle 2> or 2>>
+            if let Some((filename, append)) = &stderr_file {
+                use std::os::unix::io::AsRawFd;
+                let file = if *append {
+                    std::fs::OpenOptions::new().create(true).append(true).open(filename)
+                } else {
+                    std::fs::File::create(filename)
+                };
+                if let Ok(f) = file {
+                    dup2(f.as_raw_fd(), 2).ok();
+                }
+            }
             run_builtin(tokens, history);
+            std::io::stdout().flush().ok();
+            // Restore fds
+            if let Some(fd) = orig_stdout { dup2(fd, 1).ok(); if fd != 0 && fd != 1 { close(fd).ok(); } }
+            if let Some(fd) = orig_stderr { dup2(fd, 2).ok(); if fd != 0 && fd != 1 && fd != 2 { close(fd).ok(); } }
         } else {
             // Check if command exists in PATH
             let cmd = &tokens[0];
