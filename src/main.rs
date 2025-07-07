@@ -781,6 +781,16 @@ fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
         }
         "history" => {
             let hist = history.lock().unwrap();
+            if tokens.len() == 2 {
+                if let Ok(n) = tokens[1].parse::<usize>() {
+                    let total = hist.len();
+                    let start = if n > total { 0 } else { total - n };
+                    for (i, cmd) in hist.iter().enumerate().skip(start) {
+                        println!("{:>5}  {}", i + 1, cmd);
+                    }
+                    return;
+                }
+            }
             for (i, cmd) in hist.iter().enumerate() {
                 println!("{:>5}  {}", i + 1, cmd);
             }
