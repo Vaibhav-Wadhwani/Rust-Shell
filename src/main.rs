@@ -825,25 +825,13 @@ fn run_builtin(tokens: Vec<String>, history: &Arc<Mutex<Vec<String>>>) {
             }
         }
         "cd" => {
-            if tokens.is_empty() {
+            if tokens.len() < 2 {
                 let _ = writeln_ignore_broken_pipe(std::io::stdout(), "cd: missing argument");
                 return;
             }
-            let mut target = args[0].to_string();
-            if target == "~" {
-                if let Ok(home) = env::var("HOME") {
-                    target = home;
-                }
-            }
-            match env::set_current_dir(target.as_str()) {
-                Ok(_) => {}
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::NotFound {
-                        let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("cd: {}: No such file or directory", args[0]));
-                    } else {
-                        let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("cd: {}", e));
-                    }
-                }
+            let target = tokens[1].to_string();
+            if let Err(_) = std::env::set_current_dir(&target) {
+                let _ = writeln_ignore_broken_pipe(std::io::stdout(), &format!("cd: {}: No such file or directory", target));
             }
         }
         "history" => {
