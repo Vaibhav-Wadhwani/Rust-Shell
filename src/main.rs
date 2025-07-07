@@ -284,17 +284,43 @@ fn command_handler(input: String, history: &Arc<Mutex<Vec<String>>>) {
     }
     let command = tokens_shell[0].as_str();
     if shell_like_builtins.contains(&command) {
-        // Filter out redirection tokens and their filenames
+        // Detect redirection for stdout
+        let mut redirect = None;
+        let mut redirect_append = None;
         let mut filtered_tokens = vec![tokens_shell[0].clone()];
         let mut i = 1;
         while i < tokens_shell.len() {
             let t = &tokens_shell[i];
-            if (t == ">" || t == ">>" || t == "1>" || t == "1>>" || t == "2>" || t == "2>>") && i + 1 < tokens_shell.len() {
-                i += 2; // skip this and the filename
+            if (t == ">" || t == "1>") && i + 1 < tokens_shell.len() {
+                redirect = Some(tokens_shell[i + 1].clone());
+                i += 2;
+                continue;
+            } else if (t == ">>" || t == "1>>") && i + 1 < tokens_shell.len() {
+                redirect_append = Some(tokens_shell[i + 1].clone());
+                i += 2;
+                continue;
+            } else if (t == "2>" || t == "2>>") && i + 1 < tokens_shell.len() {
+                // skip stderr redirection for builtins
+                i += 2;
                 continue;
             }
             filtered_tokens.push(t.clone());
             i += 1;
+        }
+        if filtered_tokens[0] == "echo" {
+            let output = filtered_tokens[1..].join(" ");
+            if let Some(filename) = redirect {
+                if let Ok(mut file) = std::fs::File::create(filename) {
+                    writeln!(file, "{}", output).ok();
+                }
+            } else if let Some(filename) = redirect_append {
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(filename) {
+                    writeln!(file, "{}", output).ok();
+                }
+            } else {
+                println!("{}", output);
+            }
+            return;
         }
         run_builtin(filtered_tokens, history);
         return;
