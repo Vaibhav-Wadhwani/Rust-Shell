@@ -239,14 +239,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                     QuoteType::Single | QuoteType::Double => {
                                         if !s.starts_with('-') && !std::path::Path::new(s).exists() {
                                             let quoted = format!("'{}'", s);
-                                            let with_backslash = format!("{}\\", s);
-                                            let quoted_with_backslash = format!("'{}\\'", s);
+                                            let with_1_backslash = format!("{}\\", s);
+                                            let with_2_backslashes = format!("{}\\\\", s);
+                                            let quoted_with_1_backslash = format!("'{}\\'", s);
+                                            let quoted_with_2_backslashes = format!("'{}\\\\'", s);
                                             if std::path::Path::new(&quoted).exists() {
                                                 return quoted;
-                                            } else if std::path::Path::new(&with_backslash).exists() {
-                                                return with_backslash;
-                                            } else if std::path::Path::new(&quoted_with_backslash).exists() {
-                                                return quoted_with_backslash;
+                                            } else if std::path::Path::new(&with_1_backslash).exists() {
+                                                return with_1_backslash;
+                                            } else if std::path::Path::new(&with_2_backslashes).exists() {
+                                                return with_2_backslashes;
+                                            } else if std::path::Path::new(&quoted_with_1_backslash).exists() {
+                                                return quoted_with_1_backslash;
+                                            } else if std::path::Path::new(&quoted_with_2_backslashes).exists() {
+                                                return quoted_with_2_backslashes;
                                             }
                                         }
                                         s.clone()
@@ -505,14 +511,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
                                 QuoteType::Single | QuoteType::Double => {
                                     if !s.starts_with('-') && !std::path::Path::new(s).exists() {
                                         let quoted = format!("'{}'", s);
-                                        let with_backslash = format!("{}\\", s);
-                                        let quoted_with_backslash = format!("'{}\\'", s);
+                                        let with_1_backslash = format!("{}\\", s);
+                                        let with_2_backslashes = format!("{}\\\\", s);
+                                        let quoted_with_1_backslash = format!("'{}\\'", s);
+                                        let quoted_with_2_backslashes = format!("'{}\\\\'", s);
                                         if std::path::Path::new(&quoted).exists() {
                                             return quoted;
-                                        } else if std::path::Path::new(&with_backslash).exists() {
-                                            return with_backslash;
-                                        } else if std::path::Path::new(&quoted_with_backslash).exists() {
-                                            return quoted_with_backslash;
+                                        } else if std::path::Path::new(&with_1_backslash).exists() {
+                                            return with_1_backslash;
+                                        } else if std::path::Path::new(&with_2_backslashes).exists() {
+                                            return with_2_backslashes;
+                                        } else if std::path::Path::new(&quoted_with_1_backslash).exists() {
+                                            return quoted_with_1_backslash;
+                                        } else if std::path::Path::new(&quoted_with_2_backslashes).exists() {
+                                            return quoted_with_2_backslashes;
                                         }
                                     }
                                     s.clone()
