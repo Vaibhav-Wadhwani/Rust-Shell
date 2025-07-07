@@ -45,6 +45,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
         for i in 0..stages.len() {
             let tokens = shell_split_shell_like(&stages[i]);
             if tokens.is_empty() { continue; }
+            // Redirection file creation logic
+            let mut j = 0;
+            while j < tokens.len() {
+                if (tokens[j] == ">" || tokens[j] == "1>") && j + 1 < tokens.len() {
+                    let _ = std::fs::File::create(&tokens[j + 1]);
+                    j += 2;
+                    continue;
+                } else if (tokens[j] == ">>" || tokens[j] == "1>>") && j + 1 < tokens.len() {
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
+                    j += 2;
+                    continue;
+                }
+                j += 1;
+            }
             let is_builtin = shell_like_builtins.contains(&tokens[0].as_str());
             let (stdin_fd, stdout_fd) = match stages.len() {
                 1 => (0, 1),
@@ -156,6 +170,20 @@ pub fn execute_pipeline(input: &str, history: &Arc<Mutex<Vec<String>>>) {
     } else {
         let tokens = shell_split_shell_like(input);
         if tokens.is_empty() { return; }
+        // Redirection file creation logic
+        let mut j = 0;
+        while j < tokens.len() {
+            if (tokens[j] == ">" || tokens[j] == "1>") && j + 1 < tokens.len() {
+                let _ = std::fs::File::create(&tokens[j + 1]);
+                j += 2;
+                continue;
+            } else if (tokens[j] == ">>" || tokens[j] == "1>>") && j + 1 < tokens.len() {
+                let _ = std::fs::OpenOptions::new().create(true).append(true).open(&tokens[j + 1]);
+                j += 2;
+                continue;
+            }
+            j += 1;
+        }
         let shell_like_builtins = ["echo", "type", "pwd", "cd", "exit", "history"];
         if shell_like_builtins.contains(&tokens[0].as_str()) {
             run_builtin(tokens, history);
